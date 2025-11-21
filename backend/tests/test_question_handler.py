@@ -8,6 +8,9 @@ from anthropic import Anthropic
 def question_handler():
     """Create QuestionHandler instance"""
     mock_anthropic = Mock(spec=Anthropic)
+    # Mock the nested messages.create structure
+    mock_anthropic.messages = Mock()
+    mock_anthropic.messages.create = Mock()
     return QuestionHandler(mock_anthropic)
 
 

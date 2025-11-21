@@ -1,282 +1,372 @@
-"""
-Question Handler - AI-powered customer question answering
-Uses Claude to answer customer questions during demos
-"""
-import asyncio
-import os
-from typing import Optional, Dict, Any, List
-from datetime import datetime
 import logging
-from anthropic import AsyncAnthropic
+from typing import Dict, Any, Optional, List
+from anthropic import Anthropic
+import json
 
 logger = logging.getLogger(__name__)
 
 
 class QuestionHandler:
     """
-    Handles customer questions during demos using Claude
+    Handles customer questions during demos using Claude.
+
+    Capabilities:
+    - Understand question intent
+    - Generate natural responses
+    - Decide whether to continue demo or jump to feature
+    - Classify question sentiment and priority
+    - Extract customer interests
     """
 
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        model: str = "claude-sonnet-4-5-20250929"
-    ):
-        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
+    def __init__(self, anthropic_client: Anthropic):
+        self.anthropic = anthropic_client
+        self.model = "claude-sonnet-4-20250514"
 
-        if not self.api_key:
-            raise ValueError("Anthropic API key required")
-
-        self.client = AsyncAnthropic(api_key=self.api_key)
-        self.model = model
-
-        # Context management
-        self.product_context: Dict[str, Any] = {}
-        self.demo_context: Dict[str, Any] = {}
-        self.conversation_history: List[Dict[str, str]] = []
-
-    def set_product_context(self, context: Dict[str, Any]):
-        """
-        Set product-specific context for answering questions
-
-        Args:
-            context: Dict with product info, features, pricing, etc.
-        """
-        self.product_context = context
-        logger.info(f"Product context set: {context.get('name', 'Unknown')}")
-
-    def set_demo_context(self, context: Dict[str, Any]):
-        """
-        Set current demo context (what's happening now)
-
-        Args:
-            context: Current demo state, step, etc.
-        """
-        self.demo_context = context
-
-    async def answer_question(
+    async def handle_question(
         self,
         question: str,
-        include_demo_context: bool = True
+        demo_context: Dict[str, Any],
+        current_step: int
     ) -> Dict[str, Any]:
         """
-        Answer a customer question using Claude
+        Process customer question and generate response.
 
         Args:
-            question: Customer's question
-            include_demo_context: Whether to include current demo state
+            question: Customer's question text
+            demo_context: Current demo state and context
+            current_step: Current step number in demo
 
         Returns:
-            Dict with answer, confidence, and metadata
+            Dict containing:
+                - answer: Natural language response
+                - action: 'continue', 'jump_to_feature', 'deep_dive', 'schedule_human'
+                - feature: Feature to jump to (if applicable)
+                - intent: Question intent classification
+                - sentiment: Customer sentiment
+                - priority: Question priority
         """
-        logger.info(f"Answering question: {question}")
+        logger.info(f"Processing question: {question}")
 
-        start_time = datetime.now()
+        # Build context for Claude
+        demo_type = demo_context.get('demo_type', 'unknown')
+        customer_info = demo_context.get('customer_context', {})
+        steps_completed = current_step
+        total_steps = len(demo_context.get('demo_script', []))
 
+        # Get available features from demo script
+        available_features = self._extract_available_features(demo_context.get('demo_script', []))
+
+        prompt = self._build_prompt(
+            question=question,
+            demo_type=demo_type,
+            customer_info=customer_info,
+            steps_completed=steps_completed,
+            total_steps=total_steps,
+            available_features=available_features
+        )
+
+        # Call Claude
         try:
-            # Build system prompt
-            system_prompt = self._build_system_prompt(include_demo_context)
-
-            # Build conversation messages
-            messages = self.conversation_history + [
-                {"role": "user", "content": question}
-            ]
-
-            # Call Claude
-            response = await self.client.messages.create(
+            response = self.anthropic.messages.create(
                 model=self.model,
-                max_tokens=1024,
-                system=system_prompt,
-                messages=messages
+                max_tokens=2000,
+                temperature=0.7,
+                system=self._get_system_prompt(demo_type),
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
             )
 
-            answer = response.content[0].text
+            # Parse response
+            response_text = response.content[0].text
+            result = self._parse_response(response_text)
 
-            # Track conversation
-            self.conversation_history.append({"role": "user", "content": question})
-            self.conversation_history.append({"role": "assistant", "content": answer})
+            logger.info(f"Generated response - Action: {result['action']}, Sentiment: {result['sentiment']}")
 
-            # Keep conversation history manageable
-            if len(self.conversation_history) > 20:
-                self.conversation_history = self.conversation_history[-20:]
-
-            response_time = (datetime.now() - start_time).total_seconds() * 1000
-
-            logger.info(f"Question answered in {response_time:.0f}ms")
-
-            return {
-                "question": question,
-                "answer": answer,
-                "response_time_ms": int(response_time),
-                "confidence": 0.9,  # Could analyze response to determine confidence
-                "timestamp": datetime.now().isoformat()
-            }
+            return result
 
         except Exception as e:
-            logger.error(f"Failed to answer question: {e}")
-            raise
+            logger.error(f"Error processing question: {e}", exc_info=True)
+            return self._get_fallback_response()
 
-    def _build_system_prompt(self, include_demo_context: bool) -> str:
-        """Build system prompt with product and demo context"""
+    def _get_system_prompt(self, demo_type: str) -> str:
+        """Get system prompt for Claude based on demo type"""
 
-        product_name = self.product_context.get("name", "our product")
-        product_description = self.product_context.get("description", "")
+        base_prompt = """You are Demo Copilot, an AI sales engineer from Number Labs giving product demonstrations.
 
-        prompt = f"""You are an expert sales engineer conducting a live product demonstration for {product_name}.
+You are currently giving a live demo and a customer has asked you a question. Your goals:
 
-Product Overview:
-{product_description}
+1. **Answer naturally and conversationally** - You're having a dialogue, not giving a speech
+2. **Be helpful and enthusiastic** - You're excited about the product
+3. **Stay concise** - Keep responses under 100 words unless deep dive is requested
+4. **Adapt the demo** - If they ask about a feature, offer to show it
+5. **Build rapport** - Use their name if you know it, acknowledge their interests
 
-Key Features:
-"""
+Your personality:
+- Professional but friendly
+- Technically knowledgeable but not condescending
+- Enthusiastic about the product
+- Patient with questions
+- Focused on customer needs
 
-        # Add features
-        if "features" in self.product_context:
-            for feature in self.product_context["features"]:
-                prompt += f"- {feature}\n"
+When responding, you should also decide:
+- **continue**: Answer and continue current demo flow
+- **jump_to_feature**: Jump directly to demonstrate the feature they asked about
+- **deep_dive**: Go deeper into current topic
+- **schedule_human**: Complex question requiring human sales engineer"""
 
-        # Add pricing if available
-        if "pricing" in self.product_context:
-            prompt += f"\nPricing: {self.product_context['pricing']}\n"
+        product_specific = {
+            'insign': """
+The product is InSign - a DocuSign alternative with:
+- Electronic signatures (draw, type, or upload)
+- Document sending with multiple signers
+- Signing order control
+- Audit trails (FREE, unlike DocuSign's $20/user/month)
+- Templates and bulk sending
+- API integration
+- Mobile apps
+- Custom branding
+- 50-70% cheaper than DocuSign
+- Unlimited users model
 
-        # Add demo context if requested
-        if include_demo_context and self.demo_context:
-            prompt += f"""
-Current Demo Context:
-- Current Step: {self.demo_context.get('current_step', 'Unknown')}
-- Progress: {self.demo_context.get('progress', '0')}%
-- What we just showed: {self.demo_context.get('last_action', 'N/A')}
-"""
+Key differentiators to emphasize:
+1. Cost savings vs DocuSign
+2. Unlimited users
+3. Free audit trails
+4. All features included (no upsells)
+5. Simple, modern interface""",
 
-        prompt += """
-Your role:
-1. Answer questions clearly and concisely (2-3 sentences)
-2. Reference what we've shown in the demo when relevant
-3. Be enthusiastic but professional
-4. If you don't know something, be honest and offer to follow up
-5. Always relate answers back to customer benefits
-6. Keep answers conversational and natural for text-to-speech
+            'crew_intelligence': """
+The product is Number Labs Crew Intelligence for airlines:
+- Automated crew pay calculations
+- Proactive error detection (30% reduction in claims)
+- Voice AI assistant for crew inquiries
+- FAA Part 117 compliance monitoring
+- Real-time schedule optimization
+- Integration with legacy crew systems
+- 8-agent AI system working together
 
-Guidelines:
-- Avoid technical jargon unless the customer uses it first
-- Focus on business value, not just features
-- Use specific examples from the demo when possible
-- Be concise - this will be spoken aloud
-"""
+Key differentiators:
+1. Prevents errors before they happen
+2. Voice interface for busy crew members
+3. Saves millions in claims and admin time
+4. Works with existing airline systems"""
+        }
+
+        return base_prompt + "\n\n" + product_specific.get(demo_type, "")
+
+    def _build_prompt(
+        self,
+        question: str,
+        demo_type: str,
+        customer_info: Dict[str, Any],
+        steps_completed: int,
+        total_steps: int,
+        available_features: List[str]
+    ) -> str:
+        """Build prompt for Claude"""
+
+        customer_context = ""
+        if customer_info.get('name'):
+            customer_context += f"Customer name: {customer_info['name']}\n"
+        if customer_info.get('company'):
+            customer_context += f"Company: {customer_info['company']}\n"
+        if customer_info.get('industry'):
+            customer_context += f"Industry: {customer_info['industry']}\n"
+        if customer_info.get('interests'):
+            customer_context += f"Expressed interests: {', '.join(customer_info['interests'])}\n"
+
+        prompt = f"""CUSTOMER QUESTION: "{question}"
+
+DEMO CONTEXT:
+{customer_context}
+Demo progress: Step {steps_completed + 1} of {total_steps}
+Product: {demo_type}
+
+AVAILABLE FEATURES TO DEMONSTRATE:
+{chr(10).join(f"- {feature}" for feature in available_features)}
+
+RESPOND WITH A JSON OBJECT:
+{{
+    "answer": "Your natural, conversational response to the customer (100 words max)",
+    "action": "continue|jump_to_feature|deep_dive|schedule_human",
+    "feature": "name of feature to jump to (if action is jump_to_feature)",
+    "intent": "clarification|feature_request|pricing|comparison|technical|general",
+    "sentiment": "positive|neutral|negative|confused",
+    "priority": "low|normal|high|critical",
+    "customer_interests": ["list", "of", "topics", "customer", "is", "interested", "in"]
+}}
+
+GUIDELINES:
+- If they ask "can you show me X", set action to "jump_to_feature" and feature to X
+- If they seem confused or negative, be extra helpful
+- If question requires detailed product knowledge you don't have, set action to "schedule_human"
+- If they're asking about pricing in detail, offer to connect with sales
+- Track what they're interested in for analytics
+
+REMEMBER: You're having a conversation, not reading a script. Be natural!"""
 
         return prompt
 
-    async def suggest_follow_up_questions(self) -> List[str]:
-        """
-        Suggest relevant follow-up questions based on current context
-
-        Returns:
-            List of suggested questions
-        """
+    def _parse_response(self, response_text: str) -> Dict[str, Any]:
+        """Parse Claude's JSON response"""
         try:
-            prompt = f"""Based on the current demo context and conversation, suggest 3 relevant questions a customer might ask about {self.product_context.get('name', 'the product')}.
+            # Extract JSON from response (handle markdown code blocks)
+            if "```json" in response_text:
+                json_start = response_text.find("```json") + 7
+                json_end = response_text.find("```", json_start)
+                json_text = response_text[json_start:json_end].strip()
+            elif "```" in response_text:
+                json_start = response_text.find("```") + 3
+                json_end = response_text.find("```", json_start)
+                json_text = response_text[json_start:json_end].strip()
+            else:
+                json_text = response_text.strip()
 
-Current Context:
-- Step: {self.demo_context.get('current_step', 'Unknown')}
-- Recent conversation: {len(self.conversation_history)} exchanges
+            result = json.loads(json_text)
 
-Return only the questions, one per line, without numbering."""
+            # Validate required fields
+            required_fields = ['answer', 'action', 'intent', 'sentiment', 'priority']
+            for field in required_fields:
+                if field not in result:
+                    result[field] = self._get_default_value(field)
 
-            response = await self.client.messages.create(
-                model=self.model,
-                max_tokens=256,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            return result
 
-            questions_text = response.content[0].text
-            questions = [q.strip() for q in questions_text.split("\n") if q.strip()]
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON response: {e}")
+            logger.error(f"Response text: {response_text}")
+            return self._get_fallback_response()
 
-            return questions[:3]
+    def _get_default_value(self, field: str) -> Any:
+        """Get default value for missing field"""
+        defaults = {
+            'answer': "Let me help you with that.",
+            'action': 'continue',
+            'feature': None,
+            'intent': 'general',
+            'sentiment': 'neutral',
+            'priority': 'normal',
+            'customer_interests': []
+        }
+        return defaults.get(field)
 
-        except Exception as e:
-            logger.error(f"Failed to suggest questions: {e}")
-            return []
+    def _get_fallback_response(self) -> Dict[str, Any]:
+        """Fallback response if Claude fails"""
+        return {
+            'answer': "That's a great question. Let me make sure I give you the most accurate information. Could you rephrase that, or would you like me to connect you with a specialist?",
+            'action': 'continue',
+            'feature': None,
+            'intent': 'general',
+            'sentiment': 'neutral',
+            'priority': 'normal',
+            'customer_interests': []
+        }
 
-    def clear_conversation_history(self):
-        """Clear conversation history"""
-        self.conversation_history = []
-        logger.info("Conversation history cleared")
+    def _extract_available_features(self, demo_script: List[Dict[str, Any]]) -> List[str]:
+        """Extract list of features that can be demonstrated"""
+        features = []
+        for step in demo_script:
+            if step.get('name'):
+                features.append(step['name'])
+        return features
 
-    def get_conversation_summary(self) -> str:
-        """Get a summary of the conversation"""
-        if not self.conversation_history:
-            return "No questions asked yet."
+    async def classify_question_batch(self, questions: List[str]) -> List[Dict[str, Any]]:
+        """Classify multiple questions for analytics"""
+        classifications = []
 
-        questions = [
-            msg["content"]
-            for msg in self.conversation_history
-            if msg["role"] == "user"
-        ]
+        for question in questions:
+            prompt = f"""Classify this customer question from a product demo:
 
-        return f"Customer asked {len(questions)} questions: " + "; ".join(questions[:3])
+QUESTION: "{question}"
 
+Respond with JSON:
+{{
+    "intent": "clarification|feature_request|pricing|comparison|technical|objection|general",
+    "sentiment": "positive|neutral|negative|confused",
+    "priority": "low|normal|high|critical",
+    "topics": ["list", "of", "topics"],
+    "indicates_interest": true/false
+}}"""
 
-# InSign-specific product context
-INSIGN_PRODUCT_CONTEXT = {
-    "name": "InSign",
-    "description": "InSign is a modern electronic signature platform that simplifies document signing and management. It's a powerful alternative to DocuSign with better pricing and user experience.",
-    "features": [
-        "Unlimited document signing",
-        "Template library with smart field detection",
-        "Bulk send capabilities",
-        "Real-time notifications and reminders",
-        "Comprehensive audit trails for compliance",
-        "Mobile apps for iOS and Android",
-        "Integrations with Salesforce, Google Drive, Dropbox, and more",
-        "Advanced authentication options (SSO, 2FA)",
-        "Custom branding and white-labeling",
-        "API access for custom integrations"
-    ],
-    "pricing": "Starting at $10/user/month for Pro plan, with Enterprise options available",
-    "key_differentiators": [
-        "50% more affordable than DocuSign",
-        "More intuitive user interface",
-        "Better mobile experience",
-        "Faster document preparation with AI-powered field detection"
-    ],
-    "ideal_customers": [
-        "SMBs needing 5-100 users",
-        "Sales teams sending contracts",
-        "HR departments for onboarding",
-        "Real estate agencies",
-        "Legal firms",
-        "Financial services"
-    ],
-    "security": "SOC 2 Type II certified, GDPR compliant, bank-level encryption"
-}
+            try:
+                response = self.anthropic.messages.create(
+                    model=self.model,
+                    max_tokens=500,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+
+                result = self._parse_response(response.content[0].text)
+                result['question'] = question
+                classifications.append(result)
+
+            except Exception as e:
+                logger.error(f"Error classifying question: {e}")
+                classifications.append({
+                    'question': question,
+                    'intent': 'unknown',
+                    'sentiment': 'neutral',
+                    'priority': 'normal',
+                    'topics': [],
+                    'indicates_interest': False
+                })
+
+        return classifications
 
 
 # Example usage
-async def demo_example():
-    """Example of question handler usage"""
-    handler = QuestionHandler()
-
-    # Set context
-    handler.set_product_context(INSIGN_PRODUCT_CONTEXT)
-    handler.set_demo_context({
-        "current_step": "Dashboard Overview",
-        "progress": 40,
-        "last_action": "Showed pending documents and activity feed"
-    })
-
-    # Answer questions
-    result = await handler.answer_question(
-        "How does InSign compare to DocuSign in terms of pricing?"
-    )
-
-    print(f"Q: {result['question']}")
-    print(f"A: {result['answer']}")
-    print(f"Response time: {result['response_time_ms']}ms")
-
-    # Suggest follow-ups
-    suggestions = await handler.suggest_follow_up_questions()
-    print(f"\nSuggested questions: {suggestions}")
-
-
 if __name__ == "__main__":
-    asyncio.run(demo_example())
+    import asyncio
+    import os
+
+    async def test_question_handler():
+        anthropic = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        handler = QuestionHandler(anthropic)
+
+        # Test questions
+        test_questions = [
+            "Can you show me the mobile app?",
+            "How much does this cost compared to DocuSign?",
+            "Wait, what was that audit trail feature?",
+            "Does this integrate with Salesforce?",
+            "This looks great! Can I try it today?"
+        ]
+
+        demo_context = {
+            'demo_type': 'insign',
+            'customer_context': {
+                'name': 'Jayaprakash',
+                'company': 'Number Labs',
+                'industry': 'AI/Aviation'
+            },
+            'demo_script': [
+                {'name': 'Login'},
+                {'name': 'Dashboard'},
+                {'name': 'Sign Document'},
+                {'name': 'Send Document'},
+                {'name': 'Audit Trail'},
+                {'name': 'Mobile App'},
+                {'name': 'API Integration'}
+            ]
+        }
+
+        for question in test_questions:
+            print(f"\n{'='*60}")
+            print(f"Q: {question}")
+
+            result = await handler.handle_question(
+                question=question,
+                demo_context=demo_context,
+                current_step=3
+            )
+
+            print(f"A: {result['answer']}")
+            print(f"Action: {result['action']}")
+            if result.get('feature'):
+                print(f"Jump to: {result['feature']}")
+            print(f"Intent: {result['intent']} | Sentiment: {result['sentiment']} | Priority: {result['priority']}")
+
+    asyncio.run(test_question_handler())

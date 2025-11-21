@@ -50,8 +50,19 @@ app.add_middleware(
 
 # Database
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/demo_copilot")
-engine = create_async_engine(DATABASE_URL, echo=True)
-AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+SKIP_DATABASE = os.getenv("SKIP_DATABASE", "false").lower() in ("true", "1", "yes")
+
+# Only create engine if not skipping database
+engine = None
+AsyncSessionLocal = None
+
+if not SKIP_DATABASE:
+    try:
+        engine = create_async_engine(DATABASE_URL, echo=True)
+        AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    except Exception as e:
+        logger.warning(f"Could not create database engine: {e}")
+        logger.warning("Database will be disabled. Set SKIP_DATABASE=true to suppress this warning.")
 
 # Global state
 active_demos: Dict[str, DemoCopilot] = {}
@@ -99,6 +110,10 @@ class DemoStatusResponse(BaseModel):
 # Database dependency
 async def get_db():
     """Get database session (returns None if database unavailable)"""
+    if AsyncSessionLocal is None:
+        yield None
+        return
+
     try:
         async with AsyncSessionLocal() as session:
             yield session
@@ -376,6 +391,12 @@ async def startup_event():
     """Initialize on startup"""
     logger.info("Demo Copilot API starting up...")
 
+    # Skip database initialization if SKIP_DATABASE is set or engine is None
+    if SKIP_DATABASE or engine is None:
+        logger.info("Database disabled (SKIP_DATABASE=true or no valid DATABASE_URL)")
+        logger.info("Backend running in development mode without database")
+        return
+
     # Try to create database tables (gracefully handle if DB not available)
     try:
         async with engine.begin() as conn:
@@ -384,7 +405,7 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"Could not connect to database: {e}")
         logger.warning("Backend will run without database. Some features may not work.")
-        logger.warning("To fix: Set DATABASE_URL in .env or set up PostgreSQL")
+        logger.warning("To fix: Set DATABASE_URL in .env or set SKIP_DATABASE=true")
 
 
 @app.on_event("shutdown")

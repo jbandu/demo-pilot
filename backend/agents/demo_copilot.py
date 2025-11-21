@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 import uuid
@@ -53,7 +54,11 @@ class DemoCopilot:
 
         # Demo scripts
         self.scripts = {
-            'insign': InSignDemoScript(),
+            'insign': InSignDemoScript(
+                demo_url=os.getenv('INSIGN_DEMO_URL', 'https://demo.insign.io'),
+                demo_email=os.getenv('INSIGN_DEMO_EMAIL', 'demo@numberlabs.ai'),
+                demo_password=os.getenv('INSIGN_DEMO_PASSWORD', 'DemoPass123!')
+            ),
             # Future: 'crew_intelligence': CrewIntelligenceDemoScript(),
         }
 

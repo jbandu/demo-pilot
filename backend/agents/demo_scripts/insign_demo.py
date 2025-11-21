@@ -8,10 +8,15 @@ class InSignDemoScript:
     Defines all steps, narration, and browser actions.
     """
 
-    def __init__(self, demo_url: str = "https://demo.insign.io"):
+    def __init__(
+        self,
+        demo_url: str = "https://demo.insign.io",
+        demo_email: str = "demo@numberlabs.ai",
+        demo_password: str = "DemoPass123!"
+    ):
         self.demo_url = demo_url
-        self.demo_email = "demo@numberlabs.ai"
-        self.demo_password = "DemoPass123!"
+        self.demo_email = demo_email
+        self.demo_password = demo_password
 
         # Sample documents for demo
         self.sample_docs = {
@@ -80,15 +85,15 @@ class InSignDemoScript:
                 while providing enterprise-grade security.
             """,
             "browser_actions": [
-                {"type": "navigate", "url": "https://demo.insign.io/login"},
+                {"type": "navigate", "url": f"{self.demo_url}/login"},
                 {"type": "wait", "duration": 1},
                 {"type": "highlight", "selector": "#email", "duration": 1000},
                 {"type": "click", "selector": "#email"},
-                {"type": "type", "selector": "#email", "text": "demo@numberlabs.ai"},
+                {"type": "type", "selector": "#email", "text": self.demo_email},
                 {"type": "wait", "duration": 0.5},
                 {"type": "highlight", "selector": "#password", "duration": 1000},
                 {"type": "click", "selector": "#password"},
-                {"type": "type", "selector": "#password", "text": "••••••••"},  # Visual only
+                {"type": "type", "selector": "#password", "text": self.demo_password},
                 {"type": "wait", "duration": 0.5},
                 {"type": "highlight", "selector": "button[type='submit']", "duration": 1000},
                 {"type": "click", "selector": "button[type='submit']"},
@@ -362,7 +367,7 @@ class InSignDemoScript:
                 You're essentially getting enterprise features at small business prices.
             """,
             "browser_actions": [
-                {"type": "navigate", "url": "https://demo.insign.io/pricing"},
+                {"type": "navigate", "url": f"{self.demo_url}/pricing"},
                 {"type": "wait", "duration": 2},
                 {"type": "highlight", "selector": ".pricing-comparison-table", "duration": 3000},
                 {"type": "scroll", "selector": ".feature-comparison"}
@@ -390,7 +395,7 @@ class InSignDemoScript:
                 Just let me know how I can help!
             """,
             "browser_actions": [
-                {"type": "navigate", "url": "https://demo.insign.io/dashboard"},
+                {"type": "navigate", "url": f"{self.demo_url}/dashboard"},
                 {"type": "wait", "duration": 2}
             ],
             "visual_highlights": []

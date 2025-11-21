@@ -18,7 +18,7 @@ if [[ "$OS" == "Darwin" ]]; then
 elif [[ "$OS" == "Linux" ]]; then
     echo "🐧 Detected Linux"
 else
-    echo -e "${RED}❌ Unsupported operating system${NC}"
+    echo "${RED}❌ Unsupported operating system${NC}"
     exit 1
 fi
 
@@ -31,47 +31,47 @@ command_exists() {
 echo ""
 echo "🔍 Checking prerequisites..."
 
-# Check Python 3.10+
+# Check Python 3.11+
 if command_exists python3; then
     PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-    echo -e "${GREEN}✓${NC} Python ${PYTHON_VERSION} found"
+    echo "${GREEN}✓${NC} Python ${PYTHON_VERSION} found"
 else
-    echo -e "${RED}❌ Python 3.10+ required${NC}"
+    echo "${RED}❌ Python 3.11+ required${NC}"
     exit 1
 fi
 
-# Check Node.js 18+
+# Check Node.js 20+
 if command_exists node; then
     NODE_VERSION=$(node --version | cut -d'v' -f2 | cut -d'.' -f1)
-    if [ "$NODE_VERSION" -ge 18 ]; then
-        echo -e "${GREEN}✓${NC} Node.js $(node --version) found"
+    if [ "$NODE_VERSION" -ge 20 ]; then
+        echo "${GREEN}✓${NC} Node.js $(node --version) found"
     else
-        echo -e "${RED}❌ Node.js 18+ required (found v${NODE_VERSION})${NC}"
+        echo "${RED}❌ Node.js 20+ required (found v${NODE_VERSION})${NC}"
         exit 1
     fi
 else
-    echo -e "${RED}❌ Node.js 18+ required${NC}"
+    echo "${RED}❌ Node.js 20+ required${NC}"
     exit 1
 fi
 
 # Check Docker
 if command_exists docker; then
-    echo -e "${GREEN}✓${NC} Docker found"
+    echo "${GREEN}✓${NC} Docker found"
 else
-    echo -e "${YELLOW}⚠${NC} Docker not found (optional for local development)"
+    echo "${YELLOW}⚠${NC} Docker not found (optional for local development)"
 fi
 
 # Check Git
 if command_exists git; then
-    echo -e "${GREEN}✓${NC} Git found"
+    echo "${GREEN}✓${NC} Git found"
 else
-    echo -e "${RED}❌ Git required${NC}"
+    echo "${RED}❌ Git required${NC}"
     exit 1
 fi
 
-# Create project structure if needed
+# Create project structure
 echo ""
-echo "📁 Verifying project structure..."
+echo "📁 Creating project structure..."
 
 mkdir -p backend/{agents/demo_scripts,api/routes,database,utils}
 mkdir -p frontend/{app/demo,components,lib}
@@ -81,35 +81,35 @@ mkdir -p docs
 mkdir -p recordings
 mkdir -p logs
 
-echo -e "${GREEN}✓${NC} Project structure verified"
+echo "${GREEN}✓${NC} Project structure created"
 
 # Setup Python virtual environment
 echo ""
 echo "🐍 Setting up Python environment..."
 
+cd backend
 if [ ! -d "venv" ]; then
     python3 -m venv venv
-    echo -e "${GREEN}✓${NC} Created virtual environment"
-else
-    echo -e "${GREEN}✓${NC} Virtual environment already exists"
 fi
-
 source venv/bin/activate
 
 # Install Python dependencies
 if [ -f "requirements.txt" ]; then
     echo "📦 Installing Python packages..."
-    pip install --upgrade pip --quiet
-    pip install -r requirements.txt --quiet
-    echo -e "${GREEN}✓${NC} Python packages installed"
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    echo "${GREEN}✓${NC} Python packages installed"
 else
-    echo -e "${YELLOW}⚠${NC} requirements.txt not found, skipping Python packages"
+    echo "${YELLOW}⚠${NC} requirements.txt not found, skipping Python packages"
 fi
 
 # Install Playwright browsers
 echo "🎭 Installing Playwright browsers..."
 playwright install chromium
-echo -e "${GREEN}✓${NC} Playwright setup complete"
+playwright install-deps chromium
+echo "${GREEN}✓${NC} Playwright setup complete"
+
+cd ..
 
 # Setup Node.js environment
 echo ""
@@ -117,12 +117,13 @@ echo "📦 Setting up Node.js environment..."
 
 cd frontend
 if [ ! -f "package.json" ]; then
-    echo -e "${YELLOW}⚠${NC} package.json not found in frontend/"
-else
-    echo "📦 Installing Node packages..."
-    npm install --silent
-    echo -e "${GREEN}✓${NC} Node packages installed"
+    echo "${YELLOW}⚠${NC} package.json not found, initializing..."
+    npm init -y
 fi
+
+echo "📦 Installing Node packages..."
+npm install
+echo "${GREEN}✓${NC} Node packages installed"
 
 cd ..
 
@@ -131,32 +132,48 @@ echo ""
 echo "⚙️  Setting up environment variables..."
 
 if [ ! -f ".env" ]; then
-    if [ -f ".env.example" ]; then
-        cp .env.example .env
-        echo -e "${GREEN}✓${NC} Created .env file from .env.example"
-    else
-        cat > .env << 'EOF'
-# Anthropic API Key (required)
-ANTHROPIC_API_KEY=your-anthropic-api-key-here
+    cat > .env << 'EOF'
+# Anthropic
+ANTHROPIC_API_KEY=your_anthropic_key_here
 
-# ElevenLabs API Key (for voice synthesis)
-ELEVENLABS_API_KEY=your-elevenlabs-api-key-here
+# ElevenLabs
+ELEVENLABS_API_KEY=your_elevenlabs_key_here
 
-# Database URL (default: SQLite)
-DATABASE_URL=sqlite+aiosqlite:///./demo_copilot.db
+# OpenAI (for Whisper)
+OPENAI_API_KEY=your_openai_key_here
 
-# Server configuration
-PORT=8000
-HOST=0.0.0.0
+# Database (Neon PostgreSQL)
+DATABASE_URL=postgresql://user:pass@neon.tech:5432/demo_copilot
 
-# Frontend URL (for CORS)
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# InSign Demo Environment
+INSIGN_DEMO_URL=https://demo.insign.io
+INSIGN_DEMO_EMAIL=demo@numberlabs.ai
+INSIGN_DEMO_PASSWORD=your_demo_password
+
+# Server URLs
+BACKEND_URL=http://localhost:8000
 FRONTEND_URL=http://localhost:3000
+
+# Vercel (for deployment)
+VERCEL_TOKEN=your_vercel_token_here
+
+# GCP (for deployment)
+GCP_PROJECT_ID=your_gcp_project_id
+GCP_REGION=us-central1
 EOF
-        echo -e "${GREEN}✓${NC} Created .env file"
-    fi
-    echo -e "${YELLOW}⚠${NC} Please update .env with your actual API keys"
+    echo "${GREEN}✓${NC} Created .env file"
+    echo "${YELLOW}⚠${NC} Please update .env with your actual API keys"
 else
-    echo -e "${GREEN}✓${NC} .env file already exists"
+    echo "${GREEN}✓${NC} .env file already exists"
+fi
+
+# Create backend/.env symlink
+if [ ! -f "backend/.env" ]; then
+    ln -s ../.env backend/.env
+    echo "${GREEN}✓${NC} Created backend/.env symlink"
 fi
 
 # Create frontend/.env.local
@@ -165,7 +182,7 @@ if [ ! -f "frontend/.env.local" ]; then
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_WS_URL=ws://localhost:8000
 EOF
-    echo -e "${GREEN}✓${NC} Created frontend/.env.local"
+    echo "${GREEN}✓${NC} Created frontend/.env.local"
 fi
 
 # Setup demo data
@@ -187,58 +204,123 @@ Place your demo documents here:
 These will be used during InSign demos.
 EOF
 
-echo -e "${GREEN}✓${NC} Demo data structure created"
+echo "${GREEN}✓${NC} Demo data structure created"
 
 # Setup git hooks (optional)
 echo ""
 echo "🪝 Setting up git hooks..."
 
 if [ -d ".git" ]; then
-    mkdir -p .git/hooks
     cat > .git/hooks/pre-commit << 'EOF'
 #!/bin/bash
-# Pre-commit hook for Demo Copilot
+# Run Python linting
+cd backend
+source venv/bin/activate
+black --check . || exit 1
+flake8 . || exit 1
+cd ..
 
-echo "Running pre-commit checks..."
-
-# Check Python files
-python_files=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$')
-if [ -n "$python_files" ]; then
-    echo "Checking Python files..."
-    for file in $python_files; do
-        python3 -m py_compile "$file" || exit 1
-    done
-fi
+# Run TypeScript checks
+cd frontend
+npm run lint || exit 1
+cd ..
 
 echo "✅ Pre-commit checks passed"
 EOF
     chmod +x .git/hooks/pre-commit
-    echo -e "${GREEN}✓${NC} Git hooks installed"
+    echo "${GREEN}✓${NC} Git hooks installed"
 fi
+
+# Create helpful scripts
+echo ""
+echo "🛠️  Creating utility scripts..."
+
+# Start dev script
+cat > scripts/start-dev.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "🚀 Starting Demo Copilot (Development Mode)..."
+
+# Start backend
+cd backend
+source venv/bin/activate
+uvicorn api.main:app --reload --host 0.0.0.0 --port 8000 &
+BACKEND_PID=$!
+
+# Start frontend
+cd ../frontend
+npm run dev &
+FRONTEND_PID=$!
+
+echo ""
+echo "✅ Demo Copilot started!"
+echo "📦 Backend: http://localhost:8000"
+echo "🌐 Frontend: http://localhost:3000"
+echo "📚 API Docs: http://localhost:8000/docs"
+echo ""
+echo "Press Ctrl+C to stop..."
+
+# Wait for Ctrl+C
+trap "kill $BACKEND_PID $FRONTEND_PID; exit" INT
+wait
+EOF
+chmod +x scripts/start-dev.sh
+
+# Stop dev script
+cat > scripts/stop-dev.sh << 'EOF'
+#!/bin/bash
+echo "🛑 Stopping Demo Copilot..."
+pkill -f "uvicorn api.main:app"
+pkill -f "next dev"
+echo "✅ Stopped"
+EOF
+chmod +x scripts/stop-dev.sh
+
+# Test script
+cat > scripts/test.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "🧪 Running tests..."
+
+# Backend tests
+echo "Testing backend..."
+cd backend
+source venv/bin/activate
+pytest tests/ -v
+cd ..
+
+# Frontend tests
+echo "Testing frontend..."
+cd frontend
+npm test
+cd ..
+
+echo "✅ All tests passed!"
+EOF
+chmod +x scripts/test.sh
+
+echo "${GREEN}✓${NC} Utility scripts created"
 
 # Final summary
 echo ""
 echo "=========================================="
-echo -e "${GREEN}✅ Setup Complete!${NC}"
+echo "${GREEN}✅ Setup Complete!${NC}"
 echo "=========================================="
 echo ""
 echo "Next steps:"
 echo "1. Update .env with your API keys"
-echo "   nano .env"
-echo ""
-echo "2. Start the development server:"
-echo "   python run_server.py"
-echo ""
-echo "3. (Optional) Start the frontend in another terminal:"
-echo "   cd frontend && npm run dev"
+echo "2. Add demo documents to demo-environments/insign/test-data/"
+echo "3. Start development: ./scripts/start-dev.sh"
 echo ""
 echo "Useful commands:"
-echo "  ${GREEN}./scripts/start-dev.sh${NC}     - Start both backend and frontend"
-echo "  ${GREEN}./scripts/stop-dev.sh${NC}      - Stop all servers"
-echo "  ${GREEN}./scripts/check-health.sh${NC}  - Check system health"
-echo "  ${GREEN}python run_server.py${NC}       - Start backend only"
+echo "  ${GREEN}./scripts/start-dev.sh${NC}   - Start development servers"
+echo "  ${GREEN}./scripts/stop-dev.sh${NC}    - Stop development servers"
+echo "  ${GREEN}./scripts/test.sh${NC}        - Run tests"
+echo "  ${GREEN}docker-compose up${NC}        - Start with Docker"
 echo ""
 echo "Documentation:"
 echo "  📚 API Docs: http://localhost:8000/docs (after starting)"
-echo "  📖 README: README.md"
+echo "  📖 README: docs/README.md"
 echo ""

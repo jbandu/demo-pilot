@@ -8,11 +8,11 @@ async def test_browser_initialization():
     controller = BrowserController(headless=True)
 
     try:
-        await controller.initialize()
+        await controller.start()
         assert controller.browser is not None
         assert controller.page is not None
     finally:
-        await controller.close()
+        await controller.stop()
 
 
 @pytest.mark.asyncio
@@ -21,14 +21,14 @@ async def test_browser_navigation():
     controller = BrowserController(headless=True, slow_mo=0)
 
     try:
-        await controller.initialize()
+        await controller.start()
         await controller.navigate("https://example.com")
 
         # Check we're on the right page
         title = await controller.page.title()
         assert "Example" in title
     finally:
-        await controller.close()
+        await controller.stop()
 
 
 @pytest.mark.asyncio
@@ -37,7 +37,7 @@ async def test_browser_click():
     controller = BrowserController(headless=True, slow_mo=0)
 
     try:
-        await controller.initialize()
+        await controller.start()
         await controller.navigate("https://example.com")
 
         # Find and click a link (example.com has a "More information..." link)
@@ -48,7 +48,7 @@ async def test_browser_click():
         url = controller.page.url
         assert "iana.org" in url
     finally:
-        await controller.close()
+        await controller.stop()
 
 
 @pytest.mark.asyncio
@@ -57,7 +57,7 @@ async def test_browser_type():
     controller = BrowserController(headless=True, slow_mo=0)
 
     try:
-        await controller.initialize()
+        await controller.start()
         await controller.navigate("https://www.google.com")
 
         # Type in search box
@@ -67,7 +67,7 @@ async def test_browser_type():
         value = await controller.page.input_value("textarea[name='q']")
         assert value == "test query"
     finally:
-        await controller.close()
+        await controller.stop()
 
 
 @pytest.mark.asyncio
@@ -76,11 +76,11 @@ async def test_browser_screenshot():
     controller = BrowserController(headless=True, slow_mo=0)
 
     try:
-        await controller.initialize()
+        await controller.start()
         await controller.navigate("https://example.com")
 
         screenshot = await controller.screenshot()
         assert screenshot is not None
         assert len(screenshot) > 0
     finally:
-        await controller.close()
+        await controller.stop()

@@ -1,410 +1,443 @@
-"""
-InSign Demo Script
-Complete demonstration flow for InSign (DocuSign alternative)
-
-Demo Flow:
-1. Login to InSign
-2. Dashboard Overview
-3. Sign a Document
-4. Send Document for Signature
-5. Audit Trail Review
-"""
-import asyncio
-import os
-from typing import Dict, Any, Optional
-from datetime import datetime
-import logging
-
-logger = logging.getLogger(__name__)
+from typing import List, Dict, Any
+from pathlib import Path
 
 
 class InSignDemoScript:
     """
-    InSign product demonstration script
-    Defines all steps, narration, and interactions
+    Complete demo script for InSign product demonstration.
+    Defines all steps, narration, and browser actions.
     """
 
-    def __init__(self, browser_controller, voice_engine):
-        self.browser = browser_controller
-        self.voice = voice_engine
-
-        # Demo configuration from environment
-        self.demo_url = os.getenv("INSIGN_DEMO_URL", "https://demo.insign.io")
-        self.demo_email = os.getenv("INSIGN_DEMO_EMAIL", "demo@numberlabs.ai")
-        self.demo_password = os.getenv("INSIGN_DEMO_PASSWORD", "")
-
-        # Demo progress tracking
-        self.current_step = 0
-        self.total_steps = 5
-
-        # Define demo sections
-        self.sections = [
-            "login",
-            "dashboard_overview",
-            "sign_document",
-            "send_document",
-            "audit_trail"
-        ]
-
-    async def run_full_demo(self, customer_name: Optional[str] = None):
-        """
-        Execute complete InSign demonstration
-
-        Args:
-            customer_name: Optional customer name for personalization
-        """
-        logger.info("Starting InSign demo...")
-
-        try:
-            # Opening
-            await self._opening_greeting(customer_name)
-
-            # Step 1: Login
-            await self._step_login()
-
-            # Step 2: Dashboard Overview
-            await self._step_dashboard_overview()
-
-            # Step 3: Sign a Document
-            await self._step_sign_document()
-
-            # Step 4: Send Document for Signature
-            await self._step_send_document()
-
-            # Step 5: Audit Trail
-            await self._step_audit_trail()
-
-            # Closing
-            await self._closing_remarks()
-
-            logger.info("InSign demo completed successfully")
-
-        except Exception as e:
-            logger.error(f"Demo failed: {e}")
-            raise
-
-    async def _opening_greeting(self, customer_name: Optional[str] = None):
-        """Opening greeting and introduction"""
-        logger.info("Step: Opening greeting")
-
-        greeting = (
-            f"Hello{' ' + customer_name if customer_name else ''}! "
-            "Welcome to this live demonstration of InSign, "
-            "our modern electronic signature platform. "
-            "Over the next 10 minutes, I'll walk you through how InSign "
-            "simplifies document signing and management for your team. "
-            "Let's get started!"
-        )
-
-        await self.voice.speak(greeting, stream=False)
-        await asyncio.sleep(1)
-
-    async def _step_login(self):
-        """Step 1: Login to InSign"""
-        self.current_step = 1
-        logger.info(f"Step {self.current_step}/{self.total_steps}: Login")
-
-        # Narrate
-        await self.voice.speak(
-            "First, I'll log into our InSign demo account. "
-            "InSign supports multiple authentication methods including "
-            "single sign-on, two-factor authentication, and social logins.",
-            stream=False
-        )
-
-        # Navigate to login page
-        await self.browser.navigate(self.demo_url)
-        await self.browser.wait(2)
-
-        # Fill in credentials
-        await self.voice.speak("I'm entering the login credentials now.", stream=False)
-
-        await self.browser.type_text("#email", self.demo_email)
-        await self.browser.type_text("#password", self.demo_password)
-
-        await self.voice.speak("And clicking sign in.", stream=False)
-        await self.browser.click("#login-button", "Login button")
-
-        # Wait for dashboard
-        await self.browser.wait_for_navigation()
-        await self.browser.wait(2)
-
-        await self.voice.speak(
-            "Great! We're now logged in and ready to explore the platform.",
-            stream=False
-        )
-
-    async def _step_dashboard_overview(self):
-        """Step 2: Dashboard Overview"""
-        self.current_step = 2
-        logger.info(f"Step {self.current_step}/{self.total_steps}: Dashboard Overview")
-
-        await self.voice.speak(
-            "Here we are on the InSign dashboard. "
-            "This is your central hub for managing all document activities.",
-            stream=False
-        )
-
-        await self.browser.wait(2)
-
-        # Highlight key areas
-        await self.voice.speak(
-            "On the left sidebar, you can access your documents, templates, "
-            "contacts, and settings. The main area shows your recent activity "
-            "and pending actions.",
-            stream=False
-        )
-
-        await self.browser.scroll("down", 300)
-        await self.browser.wait(2)
-
-        await self.voice.speak(
-            "You can see at a glance which documents are waiting for signatures, "
-            "which have been completed, and any that require your attention.",
-            stream=False
-        )
-
-        await self.browser.wait(1)
-
-    async def _step_sign_document(self):
-        """Step 3: Sign a Document"""
-        self.current_step = 3
-        logger.info(f"Step {self.current_step}/{self.total_steps}: Sign Document")
-
-        await self.voice.speak(
-            "Now, let me show you how easy it is to sign a document. "
-            "I'll click on this pending document that requires my signature.",
-            stream=False
-        )
-
-        # Click on a pending document
-        await self.browser.click(".document-item:first-child", "First pending document")
-        await self.browser.wait(2)
-
-        await self.voice.speak(
-            "The document opens in our intuitive signing interface. "
-            "InSign automatically highlights where you need to sign, "
-            "initial, or fill in information.",
-            stream=False
-        )
-
-        await self.browser.wait(2)
-
-        # Navigate to signature field
-        await self.voice.speak(
-            "I can see the signature field is highlighted here. "
-            "Let me click on it to add my signature.",
-            stream=False
-        )
-
-        await self.browser.click(".signature-field", "Signature field")
-        await self.browser.wait(1)
-
-        await self.voice.speak(
-            "InSign offers multiple signature options: you can draw your signature, "
-            "type it, upload an image, or use a pre-saved signature. "
-            "I'll use a pre-saved signature for speed.",
-            stream=False
-        )
-
-        await self.browser.click("#use-saved-signature", "Use saved signature")
-        await self.browser.wait(1)
-
-        await self.voice.speak(
-            "And now I'll click continue to finalize the signature.",
-            stream=False
-        )
-
-        await self.browser.click("#continue-button", "Continue button")
-        await self.browser.wait(2)
-
-        await self.voice.speak(
-            "Perfect! The document is now signed. InSign automatically generates "
-            "a certificate of completion with timestamp and audit trail. "
-            "All parties receive a fully executed copy via email.",
-            stream=False
-        )
-
-    async def _step_send_document(self):
-        """Step 4: Send Document for Signature"""
-        self.current_step = 4
-        logger.info(f"Step {self.current_step}/{self.total_steps}: Send Document")
-
-        await self.voice.speak(
-            "Next, let me demonstrate how to send a document for others to sign. "
-            "I'll click on the 'New Document' button.",
-            stream=False
-        )
-
-        await self.browser.click("#new-document-button", "New document button")
-        await self.browser.wait(2)
-
-        await self.voice.speak(
-            "I can either upload a new document or choose from our template library. "
-            "For this demo, I'll select an NDA template.",
-            stream=False
-        )
-
-        await self.browser.click("#templates-tab", "Templates tab")
-        await self.browser.wait(1)
-
-        await self.browser.click(".template-item:first-child", "NDA template")
-        await self.browser.wait(2)
-
-        await self.voice.speak(
-            "Now I'll add the recipient who needs to sign this document. "
-            "I'll enter their email address and assign them the role of 'Signer'.",
-            stream=False
-        )
-
-        await self.browser.type_text("#recipient-email", "client@example.com")
-        await self.browser.click("#add-recipient", "Add recipient")
-        await self.browser.wait(1)
-
-        await self.voice.speak(
-            "InSign's smart field detection automatically identifies where "
-            "signatures and other information are needed. I can also drag and drop "
-            "fields manually if needed.",
-            stream=False
-        )
-
-        await self.browser.wait(2)
-
-        await self.voice.speak(
-            "I'll add a personal message to the recipient, "
-            "and then send the document.",
-            stream=False
-        )
-
-        await self.browser.type_text(
-            "#message",
-            "Please review and sign this NDA at your earliest convenience."
-        )
-        await self.browser.wait(1)
-
-        await self.browser.click("#send-button", "Send button")
-        await self.browser.wait(2)
-
-        await self.voice.speak(
-            "Done! The recipient will receive an email notification with a secure link "
-            "to review and sign the document. They don't need an InSign account to sign.",
-            stream=False
-        )
-
-    async def _step_audit_trail(self):
-        """Step 5: Audit Trail Review"""
-        self.current_step = 5
-        logger.info(f"Step {self.current_step}/{self.total_steps}: Audit Trail")
-
-        await self.voice.speak(
-            "Finally, let me show you InSign's comprehensive audit trail. "
-            "This is critical for compliance and legal requirements.",
-            stream=False
-        )
-
-        # Navigate back to a completed document
-        await self.browser.click("#documents-nav", "Documents navigation")
-        await self.browser.wait(1)
-
-        await self.browser.click("#completed-filter", "Completed filter")
-        await self.browser.wait(1)
-
-        await self.browser.click(".document-item:first-child", "First completed document")
-        await self.browser.wait(2)
-
-        await self.voice.speak(
-            "I'll open the audit trail for this completed document.",
-            stream=False
-        )
-
-        await self.browser.click("#audit-trail-button", "Audit trail button")
-        await self.browser.wait(2)
-
-        await self.voice.speak(
-            "As you can see, InSign tracks every action taken on the document: "
-            "when it was sent, when it was opened, when each page was viewed, "
-            "when signatures were added, and when it was completed. "
-            "Each action is timestamped and includes IP address information.",
-            stream=False
-        )
-
-        await self.browser.scroll("down", 300)
-        await self.browser.wait(2)
-
-        await self.voice.speak(
-            "This level of detail ensures legal enforceability and meets "
-            "compliance requirements for industries like finance, healthcare, and legal services.",
-            stream=False
-        )
-
-    async def _closing_remarks(self):
-        """Closing remarks"""
-        logger.info("Step: Closing remarks")
-
-        await self.voice.speak(
-            "That completes our demonstration of InSign. "
-            "As you've seen, InSign makes it incredibly simple to send, sign, "
-            "and manage documents securely. "
-            "With features like templates, bulk send, mobile apps, and integrations "
-            "with tools like Salesforce and Google Drive, "
-            "InSign can transform how your team handles document workflows.",
-            stream=False
-        )
-
-        await asyncio.sleep(1)
-
-        await self.voice.speak(
-            "Thank you for your time today! "
-            "Do you have any questions about what we covered, "
-            "or would you like me to dive deeper into any specific feature?",
-            stream=False
-        )
-
-    def get_current_progress(self) -> Dict[str, Any]:
-        """Get current demo progress"""
-        return {
-            "current_step": self.current_step,
-            "total_steps": self.total_steps,
-            "progress_percentage": (self.current_step / self.total_steps) * 100,
-            "current_section": self.sections[self.current_step - 1] if self.current_step > 0 else "intro"
+    def __init__(self, demo_url: str = "https://demo.insign.io"):
+        self.demo_url = demo_url
+        self.demo_email = "demo@numberlabs.ai"
+        self.demo_password = "DemoPass123!"
+
+        # Sample documents for demo
+        self.sample_docs = {
+            "nda": Path("./demo-environments/insign/test-data/NDA_Template.pdf"),
+            "employment": Path("./demo-environments/insign/test-data/Employment_Agreement.pdf"),
         }
 
-    async def skip_to_section(self, section_name: str):
-        """Skip to a specific section"""
-        if section_name in self.sections:
-            section_index = self.sections.index(section_name)
-            self.current_step = section_index
+    def get_full_demo(self) -> List[Dict[str, Any]]:
+        """Get complete 10-minute demo script"""
+        return [
+            self._step_1_greeting(),
+            self._step_2_login(),
+            self._step_3_dashboard(),
+            self._step_4_view_pending_document(),
+            self._step_5_sign_document(),
+            self._step_6_upload_new_document(),
+            self._step_7_add_signature_fields(),
+            self._step_8_add_signers(),
+            self._step_9_send_document(),
+            self._step_10_audit_trail(),
+            self._step_11_pricing_comparison(),
+            self._step_12_closing(),
+        ]
 
-            await self.voice.speak(
-                f"Skipping to the {section_name.replace('_', ' ')} section.",
-                stream=False
-            )
+    def get_quick_demo(self) -> List[Dict[str, Any]]:
+        """Get 5-minute quick demo (core features only)"""
+        return [
+            self._step_1_greeting(),
+            self._step_2_login(),
+            self._step_3_dashboard(),
+            self._step_5_sign_document(),
+            self._step_9_send_document(),
+            self._step_12_closing(),
+        ]
 
-            # Execute the section
-            section_method = getattr(self, f"_step_{section_name}", None)
-            if section_method:
-                await section_method()
-        else:
-            logger.warning(f"Section not found: {section_name}")
+    def _step_1_greeting(self) -> Dict[str, Any]:
+        return {
+            "step_number": 1,
+            "name": "Greeting",
+            "duration_estimate_seconds": 15,
+            "narration": """
+                Hi! I'm Demo Copilot, your AI-powered product specialist from Number Labs.
+                I'll give you a complete demonstration of InSign in about 10 minutes.
+
+                You can interrupt me anytime to ask questions or dive deeper into any feature.
+                Just click the question button or speak up if you're on voice.
+
+                Ready to begin? Great! Let me show you how InSign works.
+            """,
+            "browser_actions": [
+                {"type": "wait", "duration": 2}
+            ],
+            "visual_highlights": []
+        }
+
+    def _step_2_login(self) -> Dict[str, Any]:
+        return {
+            "step_number": 2,
+            "name": "Login",
+            "duration_estimate_seconds": 20,
+            "narration": """
+                Let me log into InSign as a typical user.
+                I'll use our demo account to show you the platform.
+
+                Notice the clean, modern interface. InSign focuses on simplicity
+                while providing enterprise-grade security.
+            """,
+            "browser_actions": [
+                {"type": "navigate", "url": "https://demo.insign.io/login"},
+                {"type": "wait", "duration": 1},
+                {"type": "highlight", "selector": "#email", "duration": 1000},
+                {"type": "click", "selector": "#email"},
+                {"type": "type", "selector": "#email", "text": "demo@numberlabs.ai"},
+                {"type": "wait", "duration": 0.5},
+                {"type": "highlight", "selector": "#password", "duration": 1000},
+                {"type": "click", "selector": "#password"},
+                {"type": "type", "selector": "#password", "text": "••••••••"},  # Visual only
+                {"type": "wait", "duration": 0.5},
+                {"type": "highlight", "selector": "button[type='submit']", "duration": 1000},
+                {"type": "click", "selector": "button[type='submit']"},
+                {"type": "wait", "duration": 2}
+            ],
+            "visual_highlights": ["#email", "#password", "button[type='submit']"]
+        }
+
+    def _step_3_dashboard(self) -> Dict[str, Any]:
+        return {
+            "step_number": 3,
+            "name": "Dashboard Overview",
+            "duration_estimate_seconds": 30,
+            "narration": """
+                Here's the main dashboard. You'll see three key sections:
+
+                First, documents pending YOUR signature - these are documents others
+                have sent to you. Notice you have 4 documents waiting.
+
+                Second, documents YOU'VE sent to others - you can track their status
+                in real-time. See that 2 documents are pending signatures.
+
+                And third, recently completed documents with full audit trails.
+
+                Everything is organized intuitively so you can find what you need instantly.
+            """,
+            "browser_actions": [
+                {"type": "wait", "duration": 1},
+                {"type": "highlight", "selector": ".pending-your-signature", "duration": 2000},
+                {"type": "wait", "duration": 1},
+                {"type": "highlight", "selector": ".pending-others-signature", "duration": 2000},
+                {"type": "wait", "duration": 1},
+                {"type": "highlight", "selector": ".recently-completed", "duration": 2000},
+                {"type": "wait", "duration": 1}
+            ],
+            "visual_highlights": [".dashboard-section"]
+        }
+
+    def _step_4_view_pending_document(self) -> Dict[str, Any]:
+        return {
+            "step_number": 4,
+            "name": "View Pending Document",
+            "duration_estimate_seconds": 20,
+            "narration": """
+                Let me show you how simple it is to sign a document.
+                I'll click on this employment agreement that needs my signature.
+
+                The document opens instantly with signature fields already highlighted
+                in yellow. InSign automatically detected where signatures are needed
+                when the document was uploaded.
+            """,
+            "browser_actions": [
+                {"type": "click", "selector": ".document-item:first-child"},
+                {"type": "wait", "duration": 2},
+                {"type": "highlight", "selector": ".signature-field", "duration": 2000}
+            ],
+            "visual_highlights": [".signature-field"]
+        }
+
+    def _step_5_sign_document(self) -> Dict[str, Any]:
+        return {
+            "step_number": 5,
+            "name": "Sign Document",
+            "duration_estimate_seconds": 40,
+            "narration": """
+                Now I'll sign the document. I'll click on the signature field.
+
+                InSign gives you three options: draw your signature with your mouse
+                or touchscreen, type your name and we'll create a signature, or upload
+                an image of your handwritten signature.
+
+                I'll draw my signature here... and done!
+
+                Notice the document is now marked as complete. All parties receive
+                instant email notifications, and the document is automatically archived
+                with a tamper-proof seal and full audit trail.
+
+                That's it - signing takes literally seconds!
+            """,
+            "browser_actions": [
+                {"type": "click", "selector": ".signature-field:first-child"},
+                {"type": "wait", "duration": 1},
+                {"type": "highlight", "selector": ".signature-modal", "duration": 2000},
+                # Simulate drawing signature
+                {"type": "click", "selector": ".draw-signature-tab"},
+                {"type": "wait", "duration": 2},  # Drawing animation
+                {"type": "click", "selector": ".apply-signature-button"},
+                {"type": "wait", "duration": 1},
+                {"type": "highlight", "selector": ".completion-message", "duration": 2000}
+            ],
+            "visual_highlights": [".signature-modal", ".completion-badge"]
+        }
+
+    def _step_6_upload_new_document(self) -> Dict[str, Any]:
+        return {
+            "step_number": 6,
+            "name": "Upload New Document",
+            "duration_estimate_seconds": 30,
+            "narration": """
+                Now let me show you the sender side - how you'd send a document
+                for signature.
+
+                I'll click 'Upload Document' in the main navigation.
+
+                I'll upload this NDA template from my computer.
+
+                InSign automatically detects this is a PDF and shows a preview.
+                You can also upload Word documents, images, and other formats -
+                InSign handles them all.
+            """,
+            "browser_actions": [
+                {"type": "click", "selector": "a[href='/upload']"},
+                {"type": "wait", "duration": 1},
+                {"type": "upload", "selector": "input[type='file']",
+                 "file_path": "./demo-environments/insign/test-data/NDA_Template.pdf"},
+                {"type": "wait", "duration": 2},
+                {"type": "highlight", "selector": ".document-preview", "duration": 2000}
+            ],
+            "visual_highlights": [".upload-area", ".document-preview"]
+        }
+
+    def _step_7_add_signature_fields(self) -> Dict[str, Any]:
+        return {
+            "step_number": 7,
+            "name": "Add Signature Fields",
+            "duration_estimate_seconds": 35,
+            "narration": """
+                Now I'll add signature fields. Watch how easy this is.
+
+                I can drag and drop signature fields exactly where I need them on the document.
+                See how it snaps into place? Very intuitive.
+
+                I can also add date fields, text fields, checkboxes, and initials -
+                whatever you need. Each field can be assigned to specific signers.
+
+                Let me add one more signature field at the bottom of the page.
+            """,
+            "browser_actions": [
+                {"type": "click", "selector": ".add-signature-field-button"},
+                {"type": "wait", "duration": 1},
+                # Simulate drag-and-drop
+                {"type": "highlight", "selector": ".document-preview", "duration": 1000},
+                {"type": "wait", "duration": 2},  # Dragging animation
+                {"type": "scroll", "selector": ".page-2"},
+                {"type": "wait", "duration": 1},
+                {"type": "click", "selector": ".add-signature-field-button"},
+                {"type": "wait", "duration": 2}
+            ],
+            "visual_highlights": [".signature-field-placed"]
+        }
+
+    def _step_8_add_signers(self) -> Dict[str, Any]:
+        return {
+            "step_number": 8,
+            "name": "Add Signers",
+            "duration_estimate_seconds": 45,
+            "narration": """
+                Now I'll add the signers. I can add multiple people and set a signing order.
+
+                First, I'll add our legal team member - they must sign first.
+                Email: legal@company.com
+
+                Then I'll add the vendor contact - they'll sign second.
+                Email: vendor@suppliercompany.com
+
+                Notice I can also set a deadline for signatures, add a custom message,
+                and require additional authentication like SMS verification if needed.
+
+                InSign also supports advanced features like carbon copies, access codes,
+                and even in-person signing.
+
+                For this demo, I'll keep it simple and just click Send.
+            """,
+            "browser_actions": [
+                {"type": "click", "selector": ".add-signer-button"},
+                {"type": "wait", "duration": 0.5},
+                {"type": "type", "selector": "input[name='signer-email-1']",
+                 "text": "legal@company.com"},
+                {"type": "type", "selector": "input[name='signer-name-1']",
+                 "text": "Legal Team"},
+                {"type": "wait", "duration": 1},
+                {"type": "click", "selector": ".add-signer-button"},
+                {"type": "wait", "duration": 0.5},
+                {"type": "type", "selector": "input[name='signer-email-2']",
+                 "text": "vendor@suppliercompany.com"},
+                {"type": "type", "selector": "input[name='signer-name-2']",
+                 "text": "Vendor Contact"},
+                {"type": "wait", "duration": 1},
+                {"type": "highlight", "selector": ".signing-order-options", "duration": 2000},
+                {"type": "highlight", "selector": ".advanced-options", "duration": 2000}
+            ],
+            "visual_highlights": [".signer-list", ".signing-order"]
+        }
+
+    def _step_9_send_document(self) -> Dict[str, Any]:
+        return {
+            "step_number": 9,
+            "name": "Send Document",
+            "duration_estimate_seconds": 20,
+            "narration": """
+                And... sent! The document is on its way to the signers.
+
+                They'll receive professional emails with a secure link to sign.
+                You can track opens, views, and signatures in real-time from your dashboard.
+
+                InSign also sends automatic reminders to signers who haven't completed
+                their signatures - no more manual follow-ups!
+            """,
+            "browser_actions": [
+                {"type": "highlight", "selector": ".send-button", "duration": 1000},
+                {"type": "click", "selector": ".send-button"},
+                {"type": "wait", "duration": 2},
+                {"type": "highlight", "selector": ".success-message", "duration": 2000}
+            ],
+            "visual_highlights": [".success-message"]
+        }
+
+    def _step_10_audit_trail(self) -> Dict[str, Any]:
+        return {
+            "step_number": 10,
+            "name": "Audit Trail",
+            "duration_estimate_seconds": 35,
+            "narration": """
+                Now let me show you something that DocuSign charges EXTRA for -
+                the audit trail.
+
+                InSign includes complete audit trails for every document at no additional cost.
+
+                Look at this - every action is logged with timestamps, IP addresses,
+                and device information: when the document was sent, when each person
+                opened it, how long they viewed it, when they signed, and even if they
+                declined or requested changes.
+
+                This is critical for compliance and legal requirements. InSign's audit
+                trails are court-admissible and meet all major regulatory standards.
+
+                DocuSign charges $20 per user per month for this feature.
+                With InSign, it's included free.
+            """,
+            "browser_actions": [
+                {"type": "click", "selector": ".view-audit-trail-link"},
+                {"type": "wait", "duration": 2},
+                {"type": "scroll", "selector": ".audit-event:first-child"},
+                {"type": "highlight", "selector": ".audit-event:nth-child(1)", "duration": 1500},
+                {"type": "highlight", "selector": ".audit-event:nth-child(2)", "duration": 1500},
+                {"type": "highlight", "selector": ".audit-event:nth-child(3)", "duration": 1500},
+                {"type": "highlight", "selector": ".timestamp-and-ip", "duration": 2000}
+            ],
+            "visual_highlights": [".audit-trail-panel"]
+        }
+
+    def _step_11_pricing_comparison(self) -> Dict[str, Any]:
+        return {
+            "step_number": 11,
+            "name": "Pricing Comparison",
+            "duration_estimate_seconds": 30,
+            "narration": """
+                Before we wrap up, let me show you InSign's pricing advantage.
+
+                DocuSign charges $45 per user per month for their business plan,
+                with additional fees for audit trails, advanced authentication,
+                and bulk sending.
+
+                InSign offers unlimited users, unlimited documents, and all advanced
+                features for one flat enterprise price - typically 50 to 70 percent
+                less than DocuSign.
+
+                Plus, we include features like custom branding, API access, and
+                dedicated support that DocuSign charges extra for.
+
+                You're essentially getting enterprise features at small business prices.
+            """,
+            "browser_actions": [
+                {"type": "navigate", "url": "https://demo.insign.io/pricing"},
+                {"type": "wait", "duration": 2},
+                {"type": "highlight", "selector": ".pricing-comparison-table", "duration": 3000},
+                {"type": "scroll", "selector": ".feature-comparison"}
+            ],
+            "visual_highlights": [".cost-savings-highlight"]
+        }
+
+    def _step_12_closing(self) -> Dict[str, Any]:
+        return {
+            "step_number": 12,
+            "name": "Closing & Next Steps",
+            "duration_estimate_seconds": 25,
+            "narration": """
+                And that's InSign! In just 10 minutes, you've seen how easy it is to:
+                sign documents, send documents for signature, add multiple signers,
+                and access complete audit trails - all at a fraction of DocuSign's cost.
+
+                Would you like to dive deeper into any specific feature? I can show you:
+                templates and bulk sending, API integration for developers,
+                mobile app features, or custom branding options.
+
+                Or if you're ready, I can connect you with a sales specialist to discuss
+                your specific needs and pricing.
+
+                Just let me know how I can help!
+            """,
+            "browser_actions": [
+                {"type": "navigate", "url": "https://demo.insign.io/dashboard"},
+                {"type": "wait", "duration": 2}
+            ],
+            "visual_highlights": []
+        }
+
+    def get_custom_demo(self, features: List[str]) -> List[Dict[str, Any]]:
+        """
+        Generate custom demo based on customer interests.
+
+        Args:
+            features: List of features to focus on
+                     (e.g., ['api', 'templates', 'mobile', 'branding'])
+        """
+        base_steps = [
+            self._step_1_greeting(),
+            self._step_2_login(),
+            self._step_3_dashboard(),
+        ]
+
+        feature_steps = {
+            'signing': [self._step_4_view_pending_document(), self._step_5_sign_document()],
+            'sending': [self._step_6_upload_new_document(), self._step_7_add_signature_fields(),
+                       self._step_8_add_signers(), self._step_9_send_document()],
+            'audit': [self._step_10_audit_trail()],
+            'pricing': [self._step_11_pricing_comparison()],
+        }
+
+        custom_steps = base_steps.copy()
+        for feature in features:
+            if feature in feature_steps:
+                custom_steps.extend(feature_steps[feature])
+
+        custom_steps.append(self._step_12_closing())
+
+        return custom_steps
 
 
 # Example usage
-async def demo_example():
-    """Example of running the InSign demo"""
-    from ..browser_controller import BrowserController
-    from ..voice_engine import VoiceEngine
-
-    browser = BrowserController(headless=False)
-    voice = VoiceEngine(voice_id="Rachel")
-
-    demo = InSignDemoScript(browser, voice)
-
-    try:
-        await browser.start()
-        await demo.run_full_demo(customer_name="Sarah")
-    finally:
-        await browser.stop()
-
-
 if __name__ == "__main__":
-    asyncio.run(demo_example())
+    script = InSignDemoScript()
+
+    # Get full demo
+    full_demo = script.get_full_demo()
+    print(f"Full demo has {len(full_demo)} steps")
+    print(f"Estimated duration: {sum(s['duration_estimate_seconds'] for s in full_demo)} seconds")
+
+    # Print first step
+    print("\nStep 1:")
+    print(f"Name: {full_demo[0]['name']}")
+    print(f"Narration: {full_demo[0]['narration'][:100]}...")

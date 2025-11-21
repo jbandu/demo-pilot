@@ -1,289 +1,285 @@
-"""
-Voice Engine - Text-to-speech using ElevenLabs
-Handles narration generation and audio streaming for demos
-"""
 import asyncio
 import os
-from typing import Optional, Callable, List
-from datetime import datetime
+from typing import Optional, Dict, Any
+from elevenlabs import generate, Voice, VoiceSettings, stream, voices
+from openai import AsyncOpenAI
+import io
 import logging
-from io import BytesIO
-
-try:
-    from elevenlabs import VoiceSettings
-    from elevenlabs.client import ElevenLabs
-except ImportError:
-    logging.warning("ElevenLabs not installed. Install with: pip install elevenlabs")
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 
 class VoiceEngine:
     """
-    Manages text-to-speech for demo narration using ElevenLabs
+    Handles all voice operations for Demo Copilot:
+    - Text-to-speech (TTS) using ElevenLabs
+    - Speech-to-text (STT) using OpenAI Whisper
+    - Voice streaming for real-time narration
     """
 
-    # Popular ElevenLabs voices for demos
-    VOICES = {
-        "Rachel": "21m00Tcm4TlvDq8ikWAM",  # Professional, friendly
-        "Adam": "pNInz6obpgDQGcFmaJgB",    # Deep, authoritative
-        "Bella": "EXAVITQu4vr4xnSDxMaL",   # Warm, conversational
-        "Antoni": "ErXwobaYiN019PkySvjV",  # Well-rounded, versatile
-        "Elli": "MF3mGyEYCl7XYWbV9V6O",    # Energetic, young
-        "Josh": "TxGEqnHWrfWFTfGW9XjX",    # Natural, casual
-        "Arnold": "VR6AewLTigWG4xSOukaG",  # Crisp, clear
-        "Domi": "AZnzlk1XvdvUeBnXmlld",    # Strong, confident
-        "Sam": "yoZ06aMxZJJ28mfd3POQ"      # Dynamic, raspy
-    }
-
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        voice_id: str = "Rachel",
-        stability: float = 0.5,
-        similarity_boost: float = 0.75,
-        style: float = 0.0,
-        use_speaker_boost: bool = True
-    ):
-        self.api_key = api_key or os.getenv("ELEVENLABS_API_KEY")
-
-        if not self.api_key:
-            raise ValueError("ElevenLabs API key required")
-
-        self.client = ElevenLabs(api_key=self.api_key)
+    def __init__(self):
+        self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+        self.openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
         # Voice configuration
-        self.voice_id = self.VOICES.get(voice_id, voice_id)
+        self.voice_id = "EXAVITQu4vr4xnSDxMaL"  # Rachel (professional female)
+        # Alternative voices:
+        # "pNInz6obpgDQGcFmaJgB" - Adam (professional male)
+        # "21m00Tcm4TlvDq8ikWAM" - Antoni (calm, narration)
+
         self.voice_settings = VoiceSettings(
-            stability=stability,
-            similarity_boost=similarity_boost,
-            style=style,
-            use_speaker_boost=use_speaker_boost
+            stability=0.5,  # 0-1: Lower = more expressive, Higher = more stable
+            similarity_boost=0.75,  # 0-1: How closely to match the voice
+            style=0.5,  # 0-1: Exaggeration of the style
+            use_speaker_boost=True
         )
 
-        # Callbacks
-        self.on_audio_chunk: Optional[Callable] = None
-        self.on_speech_start: Optional[Callable] = None
-        self.on_speech_end: Optional[Callable] = None
+        # Audio cache
+        self.audio_cache: Dict[str, bytes] = {}
 
-        # Tracking
-        self.narration_log: List[dict] = []
-
-    async def speak(self, text: str, stream: bool = True) -> Optional[bytes]:
+    async def text_to_speech(
+        self,
+        text: str,
+        save_path: Optional[str] = None,
+        stream_audio: bool = False
+    ) -> Optional[bytes]:
         """
-        Convert text to speech
+        Convert text to speech using ElevenLabs.
 
         Args:
             text: Text to convert to speech
-            stream: If True, streams audio chunks; if False, returns full audio
+            save_path: Optional path to save audio file
+            stream_audio: If True, stream audio chunks in real-time
 
         Returns:
-            Audio bytes if stream=False, else None
+            Audio bytes if not streaming, None if streaming
         """
-        logger.info(f"Speaking: {text[:50]}...")
-
-        # Log narration
-        self.narration_log.append({
-            "text": text,
-            "timestamp": datetime.now().isoformat(),
-            "voice_id": self.voice_id
-        })
-
-        if self.on_speech_start:
-            await self.on_speech_start(text)
+        logger.info(f"Generating speech for: {text[:50]}...")
 
         try:
-            if stream:
-                # Stream audio chunks
-                audio_stream = self.client.text_to_speech.convert(
+            # Check cache first
+            cache_key = f"{self.voice_id}:{text}"
+            if cache_key in self.audio_cache and not stream_audio:
+                logger.info("Using cached audio")
+                return self.audio_cache[cache_key]
+
+            if stream_audio:
+                # Stream audio in real-time (lower latency)
+                audio_stream = generate(
                     text=text,
-                    voice_id=self.voice_id,
-                    model_id="eleven_turbo_v2_5",  # Fastest model
-                    output_format="mp3_44100_128",
-                    voice_settings=self.voice_settings
+                    voice=self.voice_id,
+                    model="eleven_turbo_v2",  # Fastest model
+                    stream=True,
+                    api_key=self.elevenlabs_api_key
                 )
 
+                # Stream chunks to websocket or audio player
                 for chunk in audio_stream:
-                    if self.on_audio_chunk:
-                        await self.on_audio_chunk(chunk)
-
-                if self.on_speech_end:
-                    await self.on_speech_end(text)
+                    yield chunk
 
                 return None
 
             else:
-                # Get full audio
-                audio = self.client.text_to_speech.convert(
+                # Generate full audio (better quality)
+                audio_bytes = generate(
                     text=text,
-                    voice_id=self.voice_id,
-                    model_id="eleven_turbo_v2_5",
-                    output_format="mp3_44100_128",
-                    voice_settings=self.voice_settings
+                    voice=self.voice_id,
+                    model="eleven_multilingual_v2",  # Best quality
+                    api_key=self.elevenlabs_api_key
                 )
 
-                # Convert generator to bytes
-                audio_bytes = b"".join(chunk for chunk in audio)
+                # Cache the audio
+                self.audio_cache[cache_key] = audio_bytes
 
-                if self.on_speech_end:
-                    await self.on_speech_end(text)
+                # Save to file if requested
+                if save_path:
+                    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+                    with open(save_path, 'wb') as f:
+                        f.write(audio_bytes)
+                    logger.info(f"Audio saved to: {save_path}")
 
                 return audio_bytes
 
         except Exception as e:
-            logger.error(f"Speech generation failed: {e}")
+            logger.error(f"Error generating speech: {e}")
             raise
 
-    async def speak_with_timing(
+    async def speech_to_text(
         self,
-        text: str,
-        pre_delay: float = 0.0,
-        post_delay: float = 0.5
-    ) -> bytes:
+        audio_file_path: Optional[str] = None,
+        audio_bytes: Optional[bytes] = None
+    ) -> str:
         """
-        Speak text with timing delays
+        Convert speech to text using OpenAI Whisper.
 
         Args:
-            text: Text to speak
-            pre_delay: Seconds to wait before speaking
-            post_delay: Seconds to wait after speaking
+            audio_file_path: Path to audio file
+            audio_bytes: Raw audio bytes
 
         Returns:
-            Audio bytes
+            Transcribed text
         """
-        if pre_delay > 0:
-            await asyncio.sleep(pre_delay)
+        logger.info("Transcribing audio...")
 
-        audio = await self.speak(text, stream=False)
-
-        if post_delay > 0:
-            await asyncio.sleep(post_delay)
-
-        return audio
-
-    async def narrate_action(self, action_description: str) -> bytes:
-        """
-        Narrate a demo action naturally
-
-        Args:
-            action_description: Description of the action being performed
-
-        Returns:
-            Audio bytes
-        """
-        # Add natural speech patterns
-        narration = f"{action_description}"
-
-        return await self.speak(narration, stream=False)
-
-    def get_narration_log(self) -> List[dict]:
-        """Get all narrations"""
-        return self.narration_log
-
-    def clear_narration_log(self):
-        """Clear narration history"""
-        self.narration_log = []
-
-    async def list_voices(self) -> List[dict]:
-        """Get available voices from ElevenLabs"""
         try:
-            voices = self.client.voices.get_all()
+            if audio_file_path:
+                with open(audio_file_path, 'rb') as audio_file:
+                    transcript = await self.openai_client.audio.transcriptions.create(
+                        model="whisper-1",
+                        file=audio_file,
+                        language="en"
+                    )
+            elif audio_bytes:
+                # Create file-like object from bytes
+                audio_file = io.BytesIO(audio_bytes)
+                audio_file.name = "audio.wav"
+
+                transcript = await self.openai_client.audio.transcriptions.create(
+                    model="whisper-1",
+                    file=audio_file,
+                    language="en"
+                )
+            else:
+                raise ValueError("Must provide either audio_file_path or audio_bytes")
+
+            text = transcript.text
+            logger.info(f"Transcribed: {text}")
+            return text
+
+        except Exception as e:
+            logger.error(f"Error transcribing audio: {e}")
+            raise
+
+    async def narrate_and_wait(self, text: str, save_path: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Generate speech and return audio info (duration, file path, etc).
+        Used for synchronizing narration with browser actions.
+
+        Returns:
+            Dict with audio_bytes, duration_ms, file_path
+        """
+        audio_bytes = await self.text_to_speech(text, save_path=save_path)
+
+        # Calculate duration (approximate)
+        # Average speaking rate: ~150 words per minute
+        word_count = len(text.split())
+        duration_ms = int((word_count / 150) * 60 * 1000)
+
+        return {
+            "audio_bytes": audio_bytes,
+            "duration_ms": duration_ms,
+            "file_path": save_path,
+            "text": text
+        }
+
+    def get_available_voices(self) -> list:
+        """Get list of available ElevenLabs voices"""
+        try:
+            available_voices = voices(api_key=self.elevenlabs_api_key)
             return [
                 {
                     "voice_id": voice.voice_id,
                     "name": voice.name,
-                    "category": voice.category
+                    "category": voice.category,
+                    "description": getattr(voice, 'description', '')
                 }
-                for voice in voices.voices
+                for voice in available_voices
             ]
         except Exception as e:
-            logger.error(f"Failed to list voices: {e}")
+            logger.error(f"Error fetching voices: {e}")
             return []
 
-    def set_voice(self, voice_name_or_id: str):
-        """Change the voice"""
-        if voice_name_or_id in self.VOICES:
-            self.voice_id = self.VOICES[voice_name_or_id]
-            logger.info(f"Voice set to: {voice_name_or_id}")
-        else:
-            self.voice_id = voice_name_or_id
-            logger.info(f"Voice set to custom ID: {voice_name_or_id}")
+    def set_voice(self, voice_id: str) -> None:
+        """Change the voice for narration"""
+        self.voice_id = voice_id
+        logger.info(f"Voice changed to: {voice_id}")
 
-    def adjust_voice_settings(
-        self,
-        stability: Optional[float] = None,
-        similarity_boost: Optional[float] = None,
-        style: Optional[float] = None
-    ):
-        """Adjust voice characteristics"""
-        if stability is not None:
-            self.voice_settings.stability = stability
-
-        if similarity_boost is not None:
-            self.voice_settings.similarity_boost = similarity_boost
-
-        if style is not None:
-            self.voice_settings.style = style
-
-        logger.info(f"Voice settings updated: stability={self.voice_settings.stability}, "
-                   f"similarity={self.voice_settings.similarity_boost}")
+    def clear_cache(self) -> None:
+        """Clear audio cache"""
+        self.audio_cache.clear()
+        logger.info("Audio cache cleared")
 
 
-class DemoNarrator:
+class AudioSynchronizer:
     """
-    High-level narrator for demos with pre-defined phrases
+    Synchronizes audio narration with browser actions.
+    Ensures voice and screen stay perfectly in sync.
     """
 
     def __init__(self, voice_engine: VoiceEngine):
-        self.voice = voice_engine
+        self.voice_engine = voice_engine
+        self.current_audio_task: Optional[asyncio.Task] = None
 
-    async def greet(self, customer_name: Optional[str] = None):
-        """Opening greeting"""
-        if customer_name:
-            text = f"Hello {customer_name}! Welcome to this live product demonstration. " \
-                   f"I'm your AI demo assistant, and I'll be walking you through the key features today."
-        else:
-            text = "Hello! Welcome to this live product demonstration. " \
-                   "I'm your AI demo assistant, and I'll be walking you through the key features today."
+    async def sync_narrate_and_act(
+        self,
+        narration: str,
+        browser_actions: list,
+        browser_controller
+    ) -> None:
+        """
+        Run narration and browser actions in parallel, synchronized.
 
-        return await self.voice.speak(text, stream=False)
+        Args:
+            narration: Text to narrate
+            browser_actions: List of browser actions to perform
+            browser_controller: BrowserController instance
+        """
+        # Start narration
+        audio_task = asyncio.create_task(
+            self.voice_engine.narrate_and_wait(narration)
+        )
 
-    async def introduce_section(self, section_name: str):
-        """Introduce a new demo section"""
-        text = f"Now, let's take a look at {section_name}."
-        return await self.voice.speak(text, stream=False)
+        # Start browser actions after brief delay (let narration start first)
+        await asyncio.sleep(0.5)
 
-    async def explain_feature(self, feature_description: str):
-        """Explain a feature"""
-        return await self.voice.speak(feature_description, stream=False)
+        action_task = asyncio.create_task(
+            self._execute_browser_actions(browser_actions, browser_controller)
+        )
 
-    async def pause_for_question(self):
-        """Indicate readiness for questions"""
-        text = "I'm pausing here if you have any questions about what we just covered."
-        return await self.voice.speak(text, stream=False)
+        # Wait for both to complete
+        audio_result, _ = await asyncio.gather(audio_task, action_task)
 
-    async def answer_question(self, answer: str):
-        """Answer a customer question"""
-        text = f"Great question. {answer}"
-        return await self.voice.speak(text, stream=False)
+        return audio_result
 
-    async def conclude(self):
-        """Closing remarks"""
-        text = "That concludes our demonstration today. Thank you for your time! " \
-               "Feel free to reach out if you have any additional questions."
-        return await self.voice.speak(text, stream=False)
+    async def _execute_browser_actions(self, actions: list, browser_controller) -> None:
+        """Execute list of browser actions sequentially"""
+        for action in actions:
+            action_type = action.get('type')
+
+            if action_type == 'click':
+                await browser_controller.click(action['selector'])
+            elif action_type == 'type':
+                await browser_controller.type_text(action['selector'], action['text'])
+            elif action_type == 'navigate':
+                await browser_controller.navigate(action['url'])
+            elif action_type == 'upload':
+                await browser_controller.upload_file(action['selector'], action['file_path'])
+            elif action_type == 'wait':
+                await asyncio.sleep(action.get('duration', 1))
+            elif action_type == 'highlight':
+                await browser_controller.highlight(action['selector'])
+            elif action_type == 'scroll':
+                await browser_controller.scroll_to(action['selector'])
+
+            # Brief pause between actions
+            await asyncio.sleep(action.get('delay', 0.5))
 
 
 # Example usage
-async def demo_example():
-    """Example of voice engine usage"""
-    voice = VoiceEngine(voice_id="Rachel")
-    narrator = DemoNarrator(voice)
-
-    # Test speech
-    await narrator.greet("John")
-    await voice.speak("This is a test of the voice engine.")
-
-
 if __name__ == "__main__":
-    asyncio.run(demo_example())
+    async def test_voice():
+        engine = VoiceEngine()
+
+        # Test TTS
+        text = "Hello! I'm Demo Copilot, your AI sales engineer. Let me show you InSign."
+        audio = await engine.text_to_speech(text, save_path="./test_audio.mp3")
+        print(f"Generated audio: {len(audio)} bytes")
+
+        # List available voices
+        voices_list = engine.get_available_voices()
+        print(f"\nAvailable voices: {len(voices_list)}")
+        for v in voices_list[:5]:
+            print(f"  - {v['name']} ({v['voice_id']})")
+
+    asyncio.run(test_voice())

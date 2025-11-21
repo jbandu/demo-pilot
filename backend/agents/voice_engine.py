@@ -41,68 +41,79 @@ class VoiceEngine:
     async def text_to_speech(
         self,
         text: str,
-        save_path: Optional[str] = None,
-        stream_audio: bool = False
-    ) -> Optional[bytes]:
+        save_path: Optional[str] = None
+    ) -> bytes:
         """
         Convert text to speech using ElevenLabs.
 
         Args:
             text: Text to convert to speech
             save_path: Optional path to save audio file
-            stream_audio: If True, stream audio chunks in real-time
 
         Returns:
-            Audio bytes if not streaming, None if streaming
+            Audio bytes
         """
         logger.info(f"Generating speech for: {text[:50]}...")
 
         try:
             # Check cache first
             cache_key = f"{self.voice_id}:{text}"
-            if cache_key in self.audio_cache and not stream_audio:
+            if cache_key in self.audio_cache:
                 logger.info("Using cached audio")
                 return self.audio_cache[cache_key]
 
-            if stream_audio:
-                # Stream audio in real-time (lower latency)
-                audio_stream = generate(
-                    text=text,
-                    voice=self.voice_id,
-                    model="eleven_turbo_v2",  # Fastest model
-                    stream=True,
-                    api_key=self.elevenlabs_api_key
-                )
+            # Generate full audio (better quality)
+            audio_bytes = generate(
+                text=text,
+                voice=self.voice_id,
+                model="eleven_multilingual_v2",  # Best quality
+                api_key=self.elevenlabs_api_key
+            )
 
-                # Stream chunks to websocket or audio player
-                for chunk in audio_stream:
-                    yield chunk
+            # Cache the audio
+            self.audio_cache[cache_key] = audio_bytes
 
-                return None
+            # Save to file if requested
+            if save_path:
+                Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+                with open(save_path, 'wb') as f:
+                    f.write(audio_bytes)
+                logger.info(f"Audio saved to: {save_path}")
 
-            else:
-                # Generate full audio (better quality)
-                audio_bytes = generate(
-                    text=text,
-                    voice=self.voice_id,
-                    model="eleven_multilingual_v2",  # Best quality
-                    api_key=self.elevenlabs_api_key
-                )
-
-                # Cache the audio
-                self.audio_cache[cache_key] = audio_bytes
-
-                # Save to file if requested
-                if save_path:
-                    Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-                    with open(save_path, 'wb') as f:
-                        f.write(audio_bytes)
-                    logger.info(f"Audio saved to: {save_path}")
-
-                return audio_bytes
+            return audio_bytes
 
         except Exception as e:
             logger.error(f"Error generating speech: {e}")
+            raise
+
+    async def text_to_speech_stream(self, text: str):
+        """
+        Stream text-to-speech audio in real-time for lower latency.
+
+        Args:
+            text: Text to convert to speech
+
+        Yields:
+            Audio chunks as they are generated
+        """
+        logger.info(f"Streaming speech for: {text[:50]}...")
+
+        try:
+            # Stream audio in real-time (lower latency)
+            audio_stream = generate(
+                text=text,
+                voice=self.voice_id,
+                model="eleven_turbo_v2",  # Fastest model
+                stream=True,
+                api_key=self.elevenlabs_api_key
+            )
+
+            # Stream chunks to websocket or audio player
+            for chunk in audio_stream:
+                yield chunk
+
+        except Exception as e:
+            logger.error(f"Error streaming speech: {e}")
             raise
 
     async def speech_to_text(

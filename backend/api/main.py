@@ -8,6 +8,20 @@ import logging
 import os
 from datetime import datetime
 import uuid
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+# Get the backend directory path and load .env from there
+backend_dir = Path(__file__).parent.parent
+env_path = backend_dir / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
+    logger_temp = logging.getLogger(__name__)
+    logger_temp.info(f"Loaded environment variables from {env_path}")
+else:
+    # Try to load from current directory as fallback
+    load_dotenv()
 
 # Try both import styles to work from any directory
 try:
@@ -15,7 +29,6 @@ try:
     from backend.database.models import Base
 except ImportError:
     import sys
-    from pathlib import Path
     # Add parent directory to path
     sys.path.insert(0, str(Path(__file__).parent.parent.parent))
     from backend.agents.demo_copilot import DemoCopilot
@@ -114,12 +127,17 @@ async def get_db():
         yield None
         return
 
+    session = None
     try:
-        async with AsyncSessionLocal() as session:
-            yield session
+        session = AsyncSessionLocal()
+        yield session
     except Exception as e:
-        logger.warning(f"Database unavailable: {e}")
-        yield None
+        logger.warning(f"Database error: {e}")
+        if session:
+            await session.rollback()
+    finally:
+        if session:
+            await session.close()
 
 
 # Routes

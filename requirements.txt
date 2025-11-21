@@ -1,0 +1,31 @@
+# Core dependencies
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+websockets>=13.1
+
+# Database
+sqlalchemy>=2.0.36
+aiosqlite>=0.20.0
+
+# AI/ML
+anthropic>=0.39.0
+langchain>=0.3.7
+langchain-anthropic>=0.3.0
+langgraph>=0.2.45
+openai>=1.54.3
+
+# Voice
+elevenlabs>=1.9.0
+pydub>=0.25.1
+
+# Browser automation
+playwright>=1.48.0
+
+# WebSocket
+python-socketio>=5.11.4
+python-engineio>=4.12.3
+
+# Utilities
+pydantic>=2.10.0
+python-dotenv>=1.0.0

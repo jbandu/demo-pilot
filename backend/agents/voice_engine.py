@@ -23,8 +23,17 @@ class VoiceEngine:
         self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
         self.openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-        # Initialize ElevenLabs client
-        self.elevenlabs_client = ElevenLabs(api_key=self.elevenlabs_api_key)
+        # Initialize ElevenLabs client (optional - demos can run without voice)
+        self.elevenlabs_client = None
+        if self.elevenlabs_api_key:
+            try:
+                self.elevenlabs_client = ElevenLabs(api_key=self.elevenlabs_api_key)
+                logger.info("ElevenLabs voice engine initialized")
+            except Exception as e:
+                logger.warning(f"Could not initialize ElevenLabs: {e}")
+                logger.warning("Demos will run without voice narration")
+        else:
+            logger.warning("ELEVENLABS_API_KEY not set - demos will run without voice")
 
         # Voice configuration
         self.voice_id = "EXAVITQu4vr4xnSDxMaL"  # Rachel (professional female)
@@ -59,6 +68,11 @@ class VoiceEngine:
         """
         logger.info(f"Generating speech for: {text[:50]}...")
 
+        # Skip if ElevenLabs is not available
+        if not self.elevenlabs_client:
+            logger.info("Voice generation skipped (ElevenLabs not available)")
+            return b""
+
         try:
             # Check cache first
             cache_key = f"{self.voice_id}:{text}"
@@ -91,7 +105,8 @@ class VoiceEngine:
 
         except Exception as e:
             logger.error(f"Error generating speech: {e}")
-            raise
+            logger.warning("Continuing without voice generation...")
+            return b""  # Return empty bytes instead of crashing
 
     async def text_to_speech_stream(self, text: str):
         """
@@ -104,6 +119,12 @@ class VoiceEngine:
             Audio chunks as they are generated
         """
         logger.info(f"Streaming speech for: {text[:50]}...")
+
+        # Skip if ElevenLabs is not available
+        if not self.elevenlabs_client:
+            logger.info("Voice streaming skipped (ElevenLabs not available)")
+            yield b""
+            return
 
         try:
             # Stream audio in real-time (lower latency) using new client API
@@ -121,7 +142,8 @@ class VoiceEngine:
 
         except Exception as e:
             logger.error(f"Error streaming speech: {e}")
-            raise
+            logger.warning("Voice streaming failed, continuing without audio...")
+            yield b""  # Yield empty bytes instead of crashing
 
     async def speech_to_text(
         self,

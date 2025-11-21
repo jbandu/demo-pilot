@@ -1,7 +1,8 @@
 import asyncio
 import os
 from typing import Optional, Dict, Any
-from elevenlabs import generate, Voice, VoiceSettings, stream, voices
+from elevenlabs.client import ElevenLabs
+from elevenlabs import VoiceSettings
 from openai import AsyncOpenAI
 import io
 import logging
@@ -21,6 +22,9 @@ class VoiceEngine:
     def __init__(self):
         self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
         self.openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        # Initialize ElevenLabs client
+        self.elevenlabs_client = ElevenLabs(api_key=self.elevenlabs_api_key)
 
         # Voice configuration
         self.voice_id = "EXAVITQu4vr4xnSDxMaL"  # Rachel (professional female)
@@ -62,13 +66,16 @@ class VoiceEngine:
                 logger.info("Using cached audio")
                 return self.audio_cache[cache_key]
 
-            # Generate full audio (better quality)
-            audio_bytes = generate(
+            # Generate full audio (better quality) using new client API
+            audio_generator = self.elevenlabs_client.generate(
                 text=text,
                 voice=self.voice_id,
                 model="eleven_multilingual_v2",  # Best quality
-                api_key=self.elevenlabs_api_key
+                voice_settings=self.voice_settings
             )
+
+            # Collect all audio chunks into bytes
+            audio_bytes = b"".join(audio_generator)
 
             # Cache the audio
             self.audio_cache[cache_key] = audio_bytes
@@ -99,13 +106,13 @@ class VoiceEngine:
         logger.info(f"Streaming speech for: {text[:50]}...")
 
         try:
-            # Stream audio in real-time (lower latency)
-            audio_stream = generate(
+            # Stream audio in real-time (lower latency) using new client API
+            audio_stream = self.elevenlabs_client.generate(
                 text=text,
                 voice=self.voice_id,
                 model="eleven_turbo_v2",  # Fastest model
                 stream=True,
-                api_key=self.elevenlabs_api_key
+                voice_settings=self.voice_settings
             )
 
             # Stream chunks to websocket or audio player
@@ -187,15 +194,16 @@ class VoiceEngine:
     def get_available_voices(self) -> list:
         """Get list of available ElevenLabs voices"""
         try:
-            available_voices = voices(api_key=self.elevenlabs_api_key)
+            # Use new client API to get voices
+            available_voices = self.elevenlabs_client.voices.get_all()
             return [
                 {
                     "voice_id": voice.voice_id,
                     "name": voice.name,
-                    "category": voice.category,
+                    "category": getattr(voice, 'category', ''),
                     "description": getattr(voice, 'description', '')
                 }
-                for voice in available_voices
+                for voice in available_voices.voices
             ]
         except Exception as e:
             logger.error(f"Error fetching voices: {e}")

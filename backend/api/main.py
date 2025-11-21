@@ -1,480 +1,395 @@
-"""
-Demo Copilot FastAPI Server
-Provides REST API and WebSocket endpoints for demo management
-"""
-import asyncio
-import os
-from typing import Dict, Optional
-from datetime import datetime
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, BackgroundTasks
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any, List
+import asyncio
 import logging
+import os
+from datetime import datetime
+import uuid
 
-from agents.demo_copilot import DemoCopilot, DemoState
+from backend.agents.demo_copilot import DemoCopilot
+from backend.database.models import Base
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Active demo sessions
-active_sessions: Dict[str, DemoCopilot] = {}
-
-# WebSocket connections
-active_connections: Dict[str, WebSocket] = {}
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Lifespan context manager for startup/shutdown"""
-    logger.info("Starting Demo Copilot API server...")
-    yield
-    logger.info("Shutting down Demo Copilot API server...")
-
-    # Cleanup all active sessions
-    for session_id, copilot in active_sessions.items():
-        logger.info(f"Cleaning up session: {session_id}")
-        try:
-            await copilot.stop_demo()
-        except Exception as e:
-            logger.error(f"Error stopping session {session_id}: {e}")
-
-
-# Initialize FastAPI app
+# Initialize FastAPI
 app = FastAPI(
     title="Demo Copilot API",
-    description="Autonomous Product Demonstration Agent",
-    version="1.0.0",
-    lifespan=lifespan
+    description="Autonomous product demo agent system",
+    version="1.0.0"
 )
 
-# CORS middleware
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure for production
+    allow_origins=["http://localhost:3000", "https://yourdomain.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Database
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/demo_copilot")
+engine = create_async_engine(DATABASE_URL, echo=True)
+AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-# Request/Response Models
+# Global state
+active_demos: Dict[str, DemoCopilot] = {}
+websocket_connections: Dict[str, WebSocket] = {}
 
-class CreateDemoRequest(BaseModel):
-    """Request to create a new demo session"""
-    product: str = "insign"
+
+# Pydantic models
+class StartDemoRequest(BaseModel):
+    demo_type: str = Field(..., description="Type of demo: 'insign', 'crew_intelligence'")
     customer_name: Optional[str] = None
     customer_email: Optional[str] = None
-    voice_id: str = "Rachel"
-    headless: bool = True
+    customer_company: Optional[str] = None
+    customer_industry: Optional[str] = None
+    demo_duration: str = Field(default='standard', description="'quick', 'standard', or 'deep_dive'")
+    custom_features: Optional[List[str]] = Field(default=None, description="Custom features to focus on")
 
 
-class DemoSessionResponse(BaseModel):
-    """Demo session response"""
+class StartDemoResponse(BaseModel):
     session_id: str
-    product: str
-    state: str
-    customer_name: Optional[str]
-    created_at: str
+    status: str
+    demo_type: str
+    websocket_url: str
+    estimated_duration_minutes: int
 
 
-class QuestionRequest(BaseModel):
-    """Question from customer"""
+class AskQuestionRequest(BaseModel):
+    session_id: str
     question: str
-
-
-class QuestionResponse(BaseModel):
-    """Answer to customer question"""
-    question: str
-    answer: str
-    response_time_ms: int
-    timestamp: str
 
 
 class DemoControlRequest(BaseModel):
-    """Control request (pause, resume, skip)"""
-    action: str  # "pause", "resume", "skip"
-    section: Optional[str] = None  # For skip action
+    session_id: str
+    action: str  # 'pause', 'resume', 'stop'
 
 
-# API Endpoints
+class DemoStatusResponse(BaseModel):
+    session_id: str
+    status: str
+    current_step: int
+    total_steps: int
+    progress_percentage: float
+    messages: List[Dict[str, Any]]
 
+
+# Database dependency
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        yield session
+
+
+# Routes
 @app.get("/")
 async def root():
-    """Health check endpoint"""
     return {
-        "service": "Demo Copilot API",
-        "status": "running",
+        "service": "Demo Copilot",
         "version": "1.0.0",
-        "active_sessions": len(active_sessions)
+        "status": "operational",
+        "active_demos": len(active_demos)
     }
 
 
 @app.get("/health")
 async def health_check():
-    """Health check with details"""
     return {
         "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "active_sessions": len(active_sessions),
-        "active_connections": len(active_connections)
+        "timestamp": datetime.utcnow().isoformat(),
+        "active_demos": len(active_demos),
+        "websocket_connections": len(websocket_connections)
     }
 
 
-@app.post("/demo/create", response_model=DemoSessionResponse)
-async def create_demo(request: CreateDemoRequest, background_tasks: BackgroundTasks):
-    """
-    Create a new demo session
-
-    Args:
-        request: Demo creation parameters
-
-    Returns:
-        Demo session info
-    """
-    logger.info(f"Creating demo session for product: {request.product}")
-
+@app.post("/api/demo/start", response_model=StartDemoResponse)
+async def start_demo(request: StartDemoRequest, db: AsyncSession = Depends(get_db)):
+    """Start a new demo session"""
     try:
-        # Create demo copilot
-        copilot = DemoCopilot(
-            headless=request.headless,
-            voice_id=request.voice_id
+        logger.info(f"Starting {request.demo_type} demo for {request.customer_email}")
+
+        # Create demo copilot instance
+        copilot = DemoCopilot(database_session=db)
+
+        # Build customer context
+        customer_context = {
+            'name': request.customer_name,
+            'email': request.customer_email,
+            'company': request.customer_company,
+            'industry': request.customer_industry
+        }
+
+        # Get custom script if requested
+        custom_script = None
+        if request.custom_features:
+            # Build custom script focusing on requested features
+            script_builder = copilot.scripts[request.demo_type]
+            custom_script = script_builder.get_custom_demo(request.custom_features)
+
+        # Start demo
+        session_id = await copilot.start_demo(
+            demo_type=request.demo_type,
+            customer_context=customer_context,
+            custom_script=custom_script
         )
 
-        # Initialize
-        await copilot.initialize(
-            product=request.product,
-            customer_name=request.customer_name
-        )
+        # Store in active demos
+        active_demos[session_id] = copilot
 
-        # Store session
-        active_sessions[copilot.session_id] = copilot
+        # Estimate duration
+        duration_map = {
+            'quick': 5,
+            'standard': 10,
+            'deep_dive': 20
+        }
+        estimated_duration = duration_map.get(request.demo_duration, 10)
 
-        logger.info(f"Demo session created: {copilot.session_id}")
-
-        return DemoSessionResponse(
-            session_id=copilot.session_id,
-            product=request.product,
-            state=copilot.state,
-            customer_name=request.customer_name,
-            created_at=datetime.now().isoformat()
+        return StartDemoResponse(
+            session_id=session_id,
+            status='started',
+            demo_type=request.demo_type,
+            websocket_url=f"ws://localhost:8000/ws/demo/{session_id}",
+            estimated_duration_minutes=estimated_duration
         )
 
     except Exception as e:
-        logger.error(f"Failed to create demo: {e}")
+        logger.error(f"Error starting demo: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/demo/{session_id}/start")
-async def start_demo(session_id: str, background_tasks: BackgroundTasks):
-    """
-    Start a demo session
-
-    Args:
-        session_id: Demo session ID
-
-    Returns:
-        Status
-    """
-    copilot = active_sessions.get(session_id)
+@app.get("/api/demo/{session_id}/status", response_model=DemoStatusResponse)
+async def get_demo_status(session_id: str):
+    """Get current status of a demo"""
+    copilot = active_demos.get(session_id)
 
     if not copilot:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="Demo session not found")
 
-    logger.info(f"Starting demo: {session_id}")
+    state = copilot.state
+    if not state:
+        raise HTTPException(status_code=500, detail="Demo state not initialized")
 
-    # Run demo in background
-    background_tasks.add_task(run_demo_background, copilot)
+    total_steps = len(state['demo_script'])
+    current_step = state['current_step']
+    progress = (current_step / total_steps * 100) if total_steps > 0 else 0
 
-    return {
-        "status": "started",
-        "session_id": session_id
-    }
+    return DemoStatusResponse(
+        session_id=session_id,
+        status=state['status'],
+        current_step=current_step,
+        total_steps=total_steps,
+        progress_percentage=round(progress, 2),
+        messages=state.get('messages', [])
+    )
 
 
-async def run_demo_background(copilot: DemoCopilot):
-    """Run demo in background task"""
+@app.post("/api/demo/{session_id}/question")
+async def ask_question(session_id: str, request: AskQuestionRequest):
+    """Ask a question during the demo"""
+    copilot = active_demos.get(session_id)
+
+    if not copilot:
+        raise HTTPException(status_code=404, detail="Demo session not found")
+
     try:
-        result = await copilot.start_demo()
-        logger.info(f"Demo completed: {copilot.session_id}")
-
-        # Send completion notification via WebSocket
-        if copilot.session_id in active_connections:
-            ws = active_connections[copilot.session_id]
-            await ws.send_json({
-                "type": "demo_completed",
-                "data": result
-            })
-
+        await copilot.ask_question(request.question)
+        return {
+            "status": "question_received",
+            "session_id": session_id,
+            "question": request.question
+        }
     except Exception as e:
-        logger.error(f"Demo failed: {e}")
+        logger.error(f"Error processing question: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/demo/{session_id}/control")
+@app.post("/api/demo/{session_id}/control")
 async def control_demo(session_id: str, request: DemoControlRequest):
-    """
-    Control demo (pause, resume, skip)
-
-    Args:
-        session_id: Demo session ID
-        request: Control action
-
-    Returns:
-        Status
-    """
-    copilot = active_sessions.get(session_id)
+    """Control demo playback (pause, resume, stop)"""
+    copilot = active_demos.get(session_id)
 
     if not copilot:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    logger.info(f"Control action: {request.action} for session: {session_id}")
+        raise HTTPException(status_code=404, detail="Demo session not found")
 
     try:
-        if request.action == "pause":
+        if request.action == 'pause':
             await copilot.pause_demo()
-        elif request.action == "resume":
+        elif request.action == 'resume':
             await copilot.resume_demo()
-        elif request.action == "skip" and request.section:
-            await copilot.skip_to_section(request.section)
+        elif request.action == 'stop':
+            await copilot.cleanup()
+            active_demos.pop(session_id, None)
         else:
-            raise HTTPException(status_code=400, detail="Invalid action")
+            raise HTTPException(status_code=400, detail=f"Unknown action: {request.action}")
 
         return {
             "status": "success",
             "action": request.action,
             "session_id": session_id
         }
-
     except Exception as e:
-        logger.error(f"Control action failed: {e}")
+        logger.error(f"Error controlling demo: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.post("/demo/{session_id}/question", response_model=QuestionResponse)
-async def ask_question(session_id: str, request: QuestionRequest):
-    """
-    Ask a question during demo
-
-    Args:
-        session_id: Demo session ID
-        request: Question
-
-    Returns:
-        Answer
-    """
-    copilot = active_sessions.get(session_id)
-
-    if not copilot:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    logger.info(f"Question for session {session_id}: {request.question}")
-
-    try:
-        result = await copilot.ask_question(request.question)
-
-        return QuestionResponse(**result)
-
-    except Exception as e:
-        logger.error(f"Question handling failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/demo/{session_id}/status")
-async def get_demo_status(session_id: str):
-    """
-    Get demo status
-
-    Args:
-        session_id: Demo session ID
-
-    Returns:
-        Current status
-    """
-    copilot = active_sessions.get(session_id)
-
-    if not copilot:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    return copilot.get_status()
-
-
-@app.delete("/demo/{session_id}")
-async def stop_demo(session_id: str):
-    """
-    Stop and delete demo session
-
-    Args:
-        session_id: Demo session ID
-
-    Returns:
-        Status
-    """
-    copilot = active_sessions.get(session_id)
-
-    if not copilot:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    logger.info(f"Stopping demo: {session_id}")
-
-    try:
-        await copilot.stop_demo()
-
-        # Remove from active sessions
-        del active_sessions[session_id]
-
-        # Close WebSocket if exists
-        if session_id in active_connections:
-            await active_connections[session_id].close()
-            del active_connections[session_id]
-
-        return {
-            "status": "stopped",
-            "session_id": session_id
-        }
-
-    except Exception as e:
-        logger.error(f"Stop failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/demo/sessions")
-async def list_sessions():
-    """
-    List all active demo sessions
-
-    Returns:
-        List of active sessions
-    """
-    sessions = []
-
-    for session_id, copilot in active_sessions.items():
-        status = copilot.get_status()
-        sessions.append(status)
-
-    return {
-        "total": len(sessions),
-        "sessions": sessions
-    }
-
-
-# WebSocket endpoint for real-time streaming
 
 @app.websocket("/ws/demo/{session_id}")
-async def websocket_demo(websocket: WebSocket, session_id: str):
+async def websocket_demo_stream(websocket: WebSocket, session_id: str):
     """
-    WebSocket endpoint for real-time demo streaming
-
+    WebSocket endpoint for real-time demo streaming.
     Streams:
-    - Screenshots from browser
-    - Audio chunks from voice
-    - State changes
-    - Progress updates
+    - Video frames (browser screenshots)
+    - Audio chunks (voice narration)
+    - Status updates
+    - Step changes
     """
     await websocket.accept()
-
-    copilot = active_sessions.get(session_id)
-
-    if not copilot:
-        await websocket.send_json({
-            "type": "error",
-            "message": "Session not found"
-        })
-        await websocket.close()
-        return
-
-    # Store connection
-    active_connections[session_id] = websocket
+    websocket_connections[session_id] = websocket
 
     logger.info(f"WebSocket connected for session: {session_id}")
 
-    # Set up callbacks
-    async def on_screenshot(screenshot_b64: str):
-        try:
-            await websocket.send_json({
-                "type": "screenshot",
-                "data": screenshot_b64,
-                "timestamp": datetime.now().isoformat()
-            })
-        except Exception as e:
-            logger.error(f"Failed to send screenshot: {e}")
-
-    async def on_audio(audio_chunk: bytes):
-        try:
-            await websocket.send_bytes(audio_chunk)
-        except Exception as e:
-            logger.error(f"Failed to send audio: {e}")
-
-    async def on_state_change(state: DemoState):
-        try:
-            await websocket.send_json({
-                "type": "state_change",
-                "state": state,
-                "timestamp": datetime.now().isoformat()
-            })
-        except Exception as e:
-            logger.error(f"Failed to send state change: {e}")
-
-    async def on_progress(status: dict):
-        try:
-            await websocket.send_json({
-                "type": "progress_update",
-                "data": status,
-                "timestamp": datetime.now().isoformat()
-            })
-        except Exception as e:
-            logger.error(f"Failed to send progress: {e}")
-
-    # Register callbacks
-    copilot.on_screenshot = on_screenshot
-    copilot.on_audio = on_audio
-    copilot.on_state_change = on_state_change
-    copilot.on_progress_update = on_progress
-
     try:
-        # Keep connection alive and listen for messages
+        copilot = active_demos.get(session_id)
+        if not copilot:
+            await websocket.send_json({
+                "type": "error",
+                "message": "Demo session not found"
+            })
+            await websocket.close()
+            return
+
+        # Send initial connection confirmation
+        await websocket.send_json({
+            "type": "connected",
+            "session_id": session_id,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+        # Stream demo updates
         while True:
-            data = await websocket.receive_json()
+            # Check if demo is still active
+            if session_id not in active_demos:
+                break
 
-            # Handle client messages (e.g., questions, control commands)
-            message_type = data.get("type")
+            state = copilot.state
+            if not state:
+                break
 
-            if message_type == "ping":
-                await websocket.send_json({"type": "pong"})
-
-            elif message_type == "question":
-                question = data.get("question")
-                result = await copilot.ask_question(question)
+            # Get current video frame
+            video_frame = await copilot.browser.get_video_frame()
+            if video_frame:
                 await websocket.send_json({
-                    "type": "answer",
-                    "data": result
+                    "type": "video_frame",
+                    "data": video_frame,
+                    "timestamp": datetime.utcnow().isoformat()
                 })
+
+            # Send status update
+            await websocket.send_json({
+                "type": "status_update",
+                "current_step": state['current_step'],
+                "total_steps": len(state['demo_script']),
+                "status": state['status'],
+                "timestamp": datetime.utcnow().isoformat()
+            })
+
+            # Check for new messages
+            if state.get('messages'):
+                last_message = state['messages'][-1]
+                await websocket.send_json({
+                    "type": "message",
+                    "message": last_message,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+
+            # Wait before next update (30 FPS = ~33ms)
+            await asyncio.sleep(0.033)
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for session: {session_id}")
-        if session_id in active_connections:
-            del active_connections[session_id]
-
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
-        if session_id in active_connections:
-            del active_connections[session_id]
+        logger.error(f"WebSocket error: {e}", exc_info=True)
+    finally:
+        websocket_connections.pop(session_id, None)
+
+
+@app.get("/api/demos")
+async def list_demos(db: AsyncSession = Depends(get_db)):
+    """List all demo sessions (for analytics)"""
+    # Query database for demo sessions
+    # This is a placeholder - implement based on your database layer
+    return {
+        "active_demos": len(active_demos),
+        "sessions": [
+            {
+                "session_id": sid,
+                "status": copilot.state.get('status') if copilot.state else 'unknown',
+                "demo_type": copilot.state.get('demo_type') if copilot.state else 'unknown'
+            }
+            for sid, copilot in active_demos.items()
+        ]
+    }
+
+
+@app.get("/api/analytics/summary")
+async def analytics_summary(db: AsyncSession = Depends(get_db)):
+    """Get analytics summary"""
+    # Implement analytics queries
+    return {
+        "total_demos_today": 0,  # Query from DB
+        "completion_rate": 0.0,
+        "avg_duration_minutes": 0.0,
+        "most_asked_questions": [],
+        "top_features_requested": []
+    }
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize on startup"""
+    logger.info("Demo Copilot API starting up...")
+
+    # Create database tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    logger.info("Database initialized")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    logger.info("Demo Copilot API shutting down...")
+
+    # Close all active demos
+    for session_id, copilot in list(active_demos.items()):
+        try:
+            await copilot.cleanup()
+        except Exception as e:
+            logger.error(f"Error cleaning up demo {session_id}: {e}")
+
+    # Close all websockets
+    for session_id, ws in list(websocket_connections.items()):
+        try:
+            await ws.close()
+        except Exception as e:
+            logger.error(f"Error closing websocket {session_id}: {e}")
+
+    logger.info("Shutdown complete")
 
 
 if __name__ == "__main__":
     import uvicorn
-
-    port = int(os.getenv("PORT", 8000))
-
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=port,
+        port=8000,
         reload=True,
         log_level="info"
     )

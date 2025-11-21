@@ -2,16 +2,16 @@
 Demo Copilot Agents
 Browser automation, voice synthesis, and question handling
 """
-from .demo_copilot import DemoCopilot, DemoState
+from .demo_copilot import DemoCopilot, DemoCopilotState
 from .browser_controller import BrowserController
-from .voice_engine import VoiceEngine, DemoNarrator
+from .voice_engine import VoiceEngine, AudioSynchronizer
 from .question_handler import QuestionHandler
 
 __all__ = [
     "DemoCopilot",
-    "DemoState",
+    "DemoCopilotState",
     "BrowserController",
     "VoiceEngine",
-    "DemoNarrator",
+    "AudioSynchronizer",
     "QuestionHandler",
 ]

@@ -1,345 +1,405 @@
-"""
-Demo Copilot - Main orchestrator for autonomous product demonstrations
-Coordinates browser automation, voice narration, and question handling
-"""
 import asyncio
-import uuid
-from typing import Optional, Dict, Any, Callable
-from datetime import datetime
-from enum import Enum
 import logging
+from typing import Optional, Dict, Any, List
+from datetime import datetime
+import uuid
+
+from anthropic import Anthropic
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolExecutor
 
 from .browser_controller import BrowserController
-from .voice_engine import VoiceEngine, DemoNarrator
-from .question_handler import QuestionHandler, INSIGN_PRODUCT_CONTEXT
+from .voice_engine import VoiceEngine, AudioSynchronizer
+from .question_handler import QuestionHandler
 from .demo_scripts.insign_demo import InSignDemoScript
 
 logger = logging.getLogger(__name__)
 
 
-class DemoState(str, Enum):
-    """Current state of the demo"""
-    IDLE = "idle"
-    STARTING = "starting"
-    RUNNING = "running"
-    PAUSED = "paused"
-    ANSWERING_QUESTION = "answering_question"
-    COMPLETED = "completed"
-    FAILED = "failed"
+class DemoCopilotState(dict):
+    """State for Demo Copilot agent"""
+    session_id: str
+    demo_type: str
+    current_step: int
+    status: str  # 'initialized', 'running', 'paused', 'completed', 'error'
+    customer_context: Dict[str, Any]
+    demo_script: List[Dict[str, Any]]
+    messages: List[Dict[str, str]]
+    errors: List[str]
+    metadata: Dict[str, Any]
 
 
 class DemoCopilot:
     """
-    Main autonomous demo agent that orchestrates product demonstrations
+    Main orchestrator for autonomous product demonstrations.
+
+    This agent:
+    1. Controls browser to navigate product
+    2. Narrates actions with natural voice
+    3. Responds to customer questions
+    4. Adapts demo based on customer interests
+    5. Tracks engagement and analytics
     """
 
-    def __init__(
-        self,
-        session_id: Optional[str] = None,
-        headless: bool = False,
-        voice_id: str = "Rachel"
-    ):
-        self.session_id = session_id or str(uuid.uuid4())
+    def __init__(self, database_session=None):
+        self.session_id = str(uuid.uuid4())
+        self.anthropic = Anthropic()
 
-        # Initialize components
-        self.browser = BrowserController(
-            headless=headless,
-            record_video=True,
-            video_dir=f"./recordings/{self.session_id}"
+        # Components
+        self.browser = BrowserController(headless=False, slow_mo=500)
+        self.voice = VoiceEngine()
+        self.synchronizer = AudioSynchronizer(self.voice)
+        self.question_handler = QuestionHandler(self.anthropic)
+
+        # Demo scripts
+        self.scripts = {
+            'insign': InSignDemoScript(),
+            # Future: 'crew_intelligence': CrewIntelligenceDemoScript(),
+        }
+
+        # State
+        self.state: Optional[DemoCopilotState] = None
+        self.db = database_session
+
+        # Build LangGraph workflow
+        self.graph = self._build_workflow()
+
+    def _build_workflow(self) -> StateGraph:
+        """Build LangGraph workflow for demo execution"""
+
+        workflow = StateGraph(DemoCopilotState)
+
+        # Define nodes
+        workflow.add_node("initialize", self._initialize_demo)
+        workflow.add_node("execute_step", self._execute_step)
+        workflow.add_node("check_questions", self._check_for_questions)
+        workflow.add_node("handle_question", self._handle_question)
+        workflow.add_node("next_step", self._advance_to_next_step)
+        workflow.add_node("complete", self._complete_demo)
+        workflow.add_node("error_handler", self._handle_error)
+
+        # Define edges
+        workflow.set_entry_point("initialize")
+
+        workflow.add_edge("initialize", "execute_step")
+        workflow.add_edge("execute_step", "check_questions")
+
+        workflow.add_conditional_edges(
+            "check_questions",
+            self._should_handle_question,
+            {
+                "handle_question": "handle_question",
+                "next_step": "next_step"
+            }
         )
 
-        self.voice = VoiceEngine(voice_id=voice_id)
-        self.narrator = DemoNarrator(self.voice)
-        self.question_handler = QuestionHandler()
+        workflow.add_edge("handle_question", "check_questions")
 
-        # Demo script (can be swapped)
-        self.demo_script: Optional[InSignDemoScript] = None
+        workflow.add_conditional_edges(
+            "next_step",
+            self._should_continue,
+            {
+                "execute_step": "execute_step",
+                "complete": "complete",
+                "error": "error_handler"
+            }
+        )
 
-        # State management
-        self.state = DemoState.IDLE
-        self.started_at: Optional[datetime] = None
-        self.paused_at: Optional[datetime] = None
-        self.pause_duration: float = 0.0
+        workflow.add_edge("complete", END)
+        workflow.add_edge("error_handler", END)
 
-        # Customer info
-        self.customer_name: Optional[str] = None
-        self.customer_email: Optional[str] = None
+        return workflow.compile()
 
-        # Metrics
-        self.questions_asked = 0
-        self.pauses_count = 0
-
-        # Callbacks for real-time updates
-        self.on_state_change: Optional[Callable] = None
-        self.on_progress_update: Optional[Callable] = None
-        self.on_screenshot: Optional[Callable] = None
-        self.on_audio: Optional[Callable] = None
-
-        # Set up browser callbacks
-        self.browser.on_screenshot = self._handle_screenshot
-        self.browser.on_action = self._handle_browser_action
-
-        # Set up voice callbacks
-        self.voice.on_audio_chunk = self._handle_audio_chunk
-        self.voice.on_speech_start = self._handle_speech_start
-        self.voice.on_speech_end = self._handle_speech_end
-
-    async def initialize(self, product: str = "insign", customer_name: Optional[str] = None):
+    async def start_demo(
+        self,
+        demo_type: str,
+        customer_context: Optional[Dict[str, Any]] = None,
+        custom_script: Optional[List[Dict[str, Any]]] = None
+    ) -> str:
         """
-        Initialize demo for a specific product
+        Start a new demo session.
 
         Args:
-            product: Product to demo ("insign", "crew", etc.)
-            customer_name: Optional customer name for personalization
-        """
-        logger.info(f"Initializing demo for product: {product}")
-
-        self.customer_name = customer_name
-        self.state = DemoState.STARTING
-
-        # Start browser
-        await self.browser.start()
-
-        # Load demo script
-        if product.lower() == "insign":
-            self.demo_script = InSignDemoScript(self.browser, self.voice)
-            self.question_handler.set_product_context(INSIGN_PRODUCT_CONTEXT)
-        else:
-            raise ValueError(f"Unknown product: {product}")
-
-        logger.info("Demo initialized successfully")
-
-    async def start_demo(self):
-        """
-        Start the full demo presentation
+            demo_type: Type of demo ('insign', 'crew_intelligence', etc.)
+            customer_context: Customer info for personalization
+            custom_script: Optional custom demo script
 
         Returns:
-            Demo session info
+            Session ID
         """
-        if not self.demo_script:
-            raise ValueError("Demo not initialized. Call initialize() first.")
+        logger.info(f"Starting {demo_type} demo, session: {self.session_id}")
 
-        logger.info(f"Starting demo session: {self.session_id}")
+        # Get demo script
+        if custom_script:
+            demo_script = custom_script
+        else:
+            demo_script = self.scripts[demo_type].get_full_demo()
 
-        self.state = DemoState.RUNNING
-        self.started_at = datetime.now()
-
-        await self._emit_state_change()
-
-        try:
-            # Run the full demo script
-            await self.demo_script.run_full_demo(customer_name=self.customer_name)
-
-            self.state = DemoState.COMPLETED
-            await self._emit_state_change()
-
-            logger.info("Demo completed successfully")
-
-            return {
-                "session_id": self.session_id,
-                "status": "completed",
-                "duration_seconds": self._get_duration(),
-                "questions_asked": self.questions_asked,
-                "pauses_count": self.pauses_count
+        # Initialize state
+        self.state = DemoCopilotState(
+            session_id=self.session_id,
+            demo_type=demo_type,
+            current_step=0,
+            status='initialized',
+            customer_context=customer_context or {},
+            demo_script=demo_script,
+            messages=[],
+            errors=[],
+            metadata={
+                'started_at': datetime.utcnow().isoformat(),
+                'total_steps': len(demo_script)
             }
+        )
+
+        # Initialize browser
+        await self.browser.initialize()
+
+        # Save to database
+        if self.db:
+            await self._save_session_to_db()
+
+        # Start workflow
+        asyncio.create_task(self._run_workflow())
+
+        return self.session_id
+
+    async def _run_workflow(self):
+        """Execute the demo workflow"""
+        try:
+            self.state['status'] = 'running'
+            result = await self.graph.ainvoke(self.state)
+            logger.info(f"Demo completed: {result['status']}")
 
         except Exception as e:
-            logger.error(f"Demo failed: {e}")
-            self.state = DemoState.FAILED
-            await self._emit_state_change()
-            raise
+            logger.error(f"Demo error: {e}", exc_info=True)
+            self.state['status'] = 'error'
+            self.state['errors'].append(str(e))
+
+        finally:
+            await self.cleanup()
+
+    async def _initialize_demo(self, state: DemoCopilotState) -> DemoCopilotState:
+        """Initialize demo - node 1"""
+        logger.info("Initializing demo...")
+
+        # Personalize greeting if we have customer context
+        if state['customer_context'].get('name'):
+            greeting = f"Hi {state['customer_context']['name']}! "
+        else:
+            greeting = "Hi! "
+
+        greeting += "I'm Demo Copilot, your AI-powered sales engineer from Number Labs."
+
+        # Generate and play greeting
+        await self.voice.text_to_speech(greeting)
+
+        state['metadata']['initialized_at'] = datetime.utcnow().isoformat()
+        return state
+
+    async def _execute_step(self, state: DemoCopilotState) -> DemoCopilotState:
+        """Execute current demo step - node 2"""
+        current_step = state['current_step']
+        step_data = state['demo_script'][current_step]
+
+        logger.info(f"Executing step {current_step + 1}/{len(state['demo_script'])}: {step_data['name']}")
+
+        try:
+            # Synchronize narration with browser actions
+            narration = step_data['narration'].strip()
+            actions = step_data['browser_actions']
+
+            audio_result = await self.synchronizer.sync_narrate_and_act(
+                narration=narration,
+                browser_actions=actions,
+                browser_controller=self.browser
+            )
+
+            # Record action in database
+            if self.db:
+                await self._save_action_to_db(step_data, audio_result)
+
+            state['messages'].append({
+                'role': 'assistant',
+                'content': narration,
+                'step': current_step,
+                'timestamp': datetime.utcnow().isoformat()
+            })
+
+        except Exception as e:
+            logger.error(f"Error executing step: {e}", exc_info=True)
+            state['errors'].append(f"Step {current_step}: {str(e)}")
+
+        return state
+
+    async def _check_for_questions(self, state: DemoCopilotState) -> DemoCopilotState:
+        """Check if customer has asked a question - node 3"""
+        # In real implementation, this would check:
+        # - WebSocket messages
+        # - Voice input
+        # - Button clicks
+
+        # For now, simulate no questions
+        state['metadata']['has_pending_question'] = False
+        return state
+
+    def _should_handle_question(self, state: DemoCopilotState) -> str:
+        """Routing function"""
+        if state['metadata'].get('has_pending_question'):
+            return "handle_question"
+        return "next_step"
+
+    async def _handle_question(self, state: DemoCopilotState) -> DemoCopilotState:
+        """Handle customer question - node 4"""
+        question = state['metadata'].get('pending_question', '')
+        logger.info(f"Handling question: {question}")
+
+        # Use Claude to understand question and generate response
+        response = await self.question_handler.handle_question(
+            question=question,
+            demo_context=state,
+            current_step=state['current_step']
+        )
+
+        # Narrate response
+        await self.voice.text_to_speech(response['answer'])
+
+        # Take action based on response
+        if response.get('action') == 'jump_to_feature':
+            # Find and jump to relevant step
+            feature = response.get('feature')
+            new_step = self._find_step_for_feature(feature, state)
+            if new_step:
+                state['current_step'] = new_step
+
+        state['messages'].append({
+            'role': 'user',
+            'content': question,
+            'timestamp': datetime.utcnow().isoformat()
+        })
+        state['messages'].append({
+            'role': 'assistant',
+            'content': response['answer'],
+            'timestamp': datetime.utcnow().isoformat()
+        })
+
+        # Clear question
+        state['metadata']['has_pending_question'] = False
+        state['metadata'].pop('pending_question', None)
+
+        return state
+
+    async def _advance_to_next_step(self, state: DemoCopilotState) -> DemoCopilotState:
+        """Move to next step - node 5"""
+        state['current_step'] += 1
+        logger.info(f"Advancing to step {state['current_step'] + 1}")
+        return state
+
+    def _should_continue(self, state: DemoCopilotState) -> str:
+        """Routing function - continue or complete?"""
+        if state['errors']:
+            return "error"
+        if state['current_step'] >= len(state['demo_script']):
+            return "complete"
+        return "execute_step"
+
+    async def _complete_demo(self, state: DemoCopilotState) -> DemoCopilotState:
+        """Complete demo - node 6"""
+        logger.info("Demo completed successfully")
+        state['status'] = 'completed'
+        state['metadata']['completed_at'] = datetime.utcnow().isoformat()
+
+        # Calculate duration
+        started = datetime.fromisoformat(state['metadata']['started_at'])
+        completed = datetime.fromisoformat(state['metadata']['completed_at'])
+        duration = (completed - started).total_seconds()
+        state['metadata']['duration_seconds'] = duration
+
+        # Update database
+        if self.db:
+            await self._update_session_in_db(state)
+
+        return state
+
+    async def _handle_error(self, state: DemoCopilotState) -> DemoCopilotState:
+        """Handle errors - node 7"""
+        logger.error(f"Demo error handler triggered: {state['errors']}")
+        state['status'] = 'error'
+        return state
+
+    def _find_step_for_feature(self, feature: str, state: DemoCopilotState) -> Optional[int]:
+        """Find step index that demonstrates a specific feature"""
+        for i, step in enumerate(state['demo_script']):
+            if feature.lower() in step['name'].lower():
+                return i
+        return None
 
     async def pause_demo(self):
         """Pause the demo"""
-        if self.state != DemoState.RUNNING:
-            logger.warning("Cannot pause - demo not running")
-            return
-
-        logger.info("Pausing demo")
-
-        self.state = DemoState.PAUSED
-        self.paused_at = datetime.now()
-        self.pauses_count += 1
-
-        await self._emit_state_change()
-
-        await self.narrator.pause_for_question()
+        if self.state:
+            self.state['status'] = 'paused'
+            logger.info("Demo paused")
 
     async def resume_demo(self):
-        """Resume the demo from pause"""
-        if self.state != DemoState.PAUSED:
-            logger.warning("Cannot resume - demo not paused")
-            return
+        """Resume paused demo"""
+        if self.state and self.state['status'] == 'paused':
+            self.state['status'] = 'running'
+            logger.info("Demo resumed")
 
-        logger.info("Resuming demo")
+    async def ask_question(self, question: str):
+        """Inject a customer question"""
+        if self.state:
+            self.state['metadata']['has_pending_question'] = True
+            self.state['metadata']['pending_question'] = question
 
-        # Track pause duration
-        if self.paused_at:
-            self.pause_duration += (datetime.now() - self.paused_at).total_seconds()
+    async def cleanup(self):
+        """Cleanup resources"""
+        logger.info("Cleaning up demo resources...")
+        await self.browser.close()
+        self.voice.clear_cache()
 
-        self.state = DemoState.RUNNING
-        self.paused_at = None
+    async def _save_session_to_db(self):
+        """Save session to database"""
+        # Implementation depends on your database layer
+        pass
 
-        await self._emit_state_change()
+    async def _save_action_to_db(self, step_data, audio_result):
+        """Save action to database"""
+        # Implementation depends on your database layer
+        pass
 
-        await self.voice.speak("Let's continue with the demonstration.", stream=False)
-
-    async def ask_question(self, question: str) -> Dict[str, Any]:
-        """
-        Ask a question during the demo
-
-        Args:
-            question: Customer's question
-
-        Returns:
-            Answer and metadata
-        """
-        logger.info(f"Customer question: {question}")
-
-        previous_state = self.state
-        self.state = DemoState.ANSWERING_QUESTION
-        self.questions_asked += 1
-
-        await self._emit_state_change()
-
-        # Update question handler with current demo context
-        if self.demo_script:
-            self.question_handler.set_demo_context(
-                self.demo_script.get_current_progress()
-            )
-
-        # Get answer from Claude
-        result = await self.question_handler.answer_question(question)
-
-        # Speak the answer
-        await self.narrator.answer_question(result["answer"])
-
-        # Resume previous state
-        self.state = previous_state
-        await self._emit_state_change()
-
-        return result
-
-    async def skip_to_section(self, section_name: str):
-        """Skip to a specific demo section"""
-        if not self.demo_script:
-            raise ValueError("Demo not initialized")
-
-        logger.info(f"Skipping to section: {section_name}")
-
-        await self.demo_script.skip_to_section(section_name)
-
-        await self._emit_progress_update()
-
-    async def stop_demo(self):
-        """Stop and cleanup demo"""
-        logger.info("Stopping demo")
-
-        self.state = DemoState.IDLE
-
-        # Cleanup
-        await self.browser.stop()
-
-        logger.info("Demo stopped and cleaned up")
-
-    def get_status(self) -> Dict[str, Any]:
-        """Get current demo status"""
-        status = {
-            "session_id": self.session_id,
-            "state": self.state,
-            "duration_seconds": self._get_duration(),
-            "questions_asked": self.questions_asked,
-            "pauses_count": self.pauses_count,
-            "customer_name": self.customer_name
-        }
-
-        if self.demo_script:
-            status["progress"] = self.demo_script.get_current_progress()
-
-        return status
-
-    def _get_duration(self) -> int:
-        """Get demo duration in seconds"""
-        if not self.started_at:
-            return 0
-
-        end_time = datetime.now()
-        total_seconds = (end_time - self.started_at).total_seconds()
-
-        # Subtract pause duration
-        return int(total_seconds - self.pause_duration)
-
-    async def _handle_screenshot(self, screenshot_b64: str):
-        """Handle screenshot from browser"""
-        if self.on_screenshot:
-            await self.on_screenshot(screenshot_b64)
-
-    async def _handle_browser_action(self, action: Dict[str, Any]):
-        """Handle browser action"""
-        logger.debug(f"Browser action: {action['type']}")
-        await self._emit_progress_update()
-
-    async def _handle_audio_chunk(self, audio_chunk: bytes):
-        """Handle audio chunk from voice engine"""
-        if self.on_audio:
-            await self.on_audio(audio_chunk)
-
-    async def _handle_speech_start(self, text: str):
-        """Handle speech start"""
-        logger.debug(f"Speaking: {text[:50]}...")
-
-    async def _handle_speech_end(self, text: str):
-        """Handle speech end"""
-        logger.debug("Speech completed")
-
-    async def _emit_state_change(self):
-        """Emit state change event"""
-        if self.on_state_change:
-            await self.on_state_change(self.state)
-
-    async def _emit_progress_update(self):
-        """Emit progress update event"""
-        if self.on_progress_update:
-            status = self.get_status()
-            await self.on_progress_update(status)
+    async def _update_session_in_db(self, state):
+        """Update session in database"""
+        # Implementation depends on your database layer
+        pass
 
 
 # Example usage
-async def demo_example():
-    """Example of running a complete demo"""
-    copilot = DemoCopilot(
-        headless=False,
-        voice_id="Rachel"
-    )
-
-    # Set up callbacks
-    async def on_state_change(state):
-        print(f"State changed: {state}")
-
-    async def on_progress(status):
-        progress = status.get("progress", {})
-        print(f"Progress: {progress.get('progress_percentage', 0):.0f}%")
-
-    copilot.on_state_change = on_state_change
-    copilot.on_progress_update = on_progress
-
-    try:
-        # Initialize for InSign demo
-        await copilot.initialize(product="insign", customer_name="Sarah")
-
-        # Start the demo
-        result = await copilot.start_demo()
-
-        print(f"\nDemo completed!")
-        print(f"Duration: {result['duration_seconds']}s")
-        print(f"Questions: {result['questions_asked']}")
-
-    except Exception as e:
-        print(f"Demo failed: {e}")
-
-    finally:
-        await copilot.stop_demo()
-
-
 if __name__ == "__main__":
-    asyncio.run(demo_example())
+    async def test_demo_copilot():
+        copilot = DemoCopilot()
+
+        # Start InSign demo
+        session_id = await copilot.start_demo(
+            demo_type='insign',
+            customer_context={
+                'name': 'Jayaprakash',
+                'company': 'Number Labs',
+                'interests': ['audit_trail', 'pricing']
+            }
+        )
+
+        print(f"Demo started: {session_id}")
+
+        # Let it run for a bit
+        await asyncio.sleep(60)
+
+        # Ask a question
+        await copilot.ask_question("Can you show me the mobile experience?")
+
+        # Wait for completion
+        while copilot.state and copilot.state['status'] == 'running':
+            await asyncio.sleep(5)
+
+        print(f"Demo completed with status: {copilot.state['status']}")
+
+    asyncio.run(test_demo_copilot())

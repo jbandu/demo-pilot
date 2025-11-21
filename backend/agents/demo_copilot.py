@@ -152,7 +152,7 @@ class DemoCopilot:
         )
 
         # Initialize browser
-        await self.browser.initialize()
+        await self.browser.start()
 
         # Save to database
         if self.db:
@@ -354,7 +354,7 @@ class DemoCopilot:
     async def cleanup(self):
         """Cleanup resources"""
         logger.info("Cleaning up demo resources...")
-        await self.browser.close()
+        await self.browser.stop()
         self.voice.clear_cache()
 
     async def _save_session_to_db(self):

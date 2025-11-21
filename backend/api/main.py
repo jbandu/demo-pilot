@@ -9,8 +9,18 @@ import os
 from datetime import datetime
 import uuid
 
-from backend.agents.demo_copilot import DemoCopilot
-from backend.database.models import Base
+# Try both import styles to work from any directory
+try:
+    from backend.agents.demo_copilot import DemoCopilot
+    from backend.database.models import Base
+except ImportError:
+    import sys
+    from pathlib import Path
+    # Add parent directory to path
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+    from backend.agents.demo_copilot import DemoCopilot
+    from backend.database.models import Base
+
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 

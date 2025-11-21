@@ -1,222 +1,197 @@
-# Demo Copilot - Autonomous Product Demo Agent
+# 🤖 Demo Copilot
 
-An AI-powered sales engineer that autonomously conducts product demonstrations by controlling a live browser, narrating actions with natural voice, and answering customer questions in real-time.
+> An AI-powered autonomous sales engineer that gives product demonstrations through natural voice conversations and live browser automation.
 
-## Overview
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Node 18+](https://img.shields.io/badge/node-18+-green.svg)](https://nodejs.org/)
 
-Demo Copilot is a proof-of-concept for Number Labs demonstrating agentic AI capabilities. It combines:
+---
 
-- **Browser Automation** (Playwright) - Controls live product interfaces
-- **Voice Synthesis** (ElevenLabs) - Natural, conversational narration
-- **AI Q&A** (Claude Sonnet 4.5) - Intelligent question handling
-- **Real-time Streaming** (WebSocket) - Live video and audio to customers
-- **Next.js Frontend** - Modern customer-facing demo interface
+## 🎯 Overview
 
-## Features
+Demo Copilot is Number Labs' proof-of-concept for autonomous AI agents. It demonstrates our capability to build intelligent agents that can:
 
-- Fully autonomous product demonstrations
-- Natural voice narration with multiple voice options
-- Intelligent real-time customer question answering
-- Adaptive demo flow (can jump to requested features)
-- Pause/resume/stop demo controls
-- Sentiment analysis and priority detection
-- Customer interest tracking for analytics
-- Comprehensive audit trails
-- Scalable architecture for multiple products
+- 🎭 **Give complete product demos autonomously**
+- 🌐 **Control web browsers with human-like behavior**
+- 🎙️ **Narrate actions in natural voice** (ElevenLabs)
+- 🤝 **Answer customer questions interactively** (Claude Sonnet 4)
+- 🎯 **Adapt demos based on customer interests**
+- 📊 **Track engagement analytics**
 
-## Initial Target: InSign Demo
+**Why we built this:** Before selling AI agents to airlines for crew operations, baggage handling, and flight planning, we're proving we can build agents that work autonomously by automating our own sales process.
 
-The first implementation demonstrates InSign (DocuSign alternative) with a 10-minute demo flow:
+---
 
-1. Login to platform
-2. Dashboard overview
-3. Sign a document
-4. Send document for signature
-5. Audit trail review
+## 🏗️ Architecture
 
-## Quick Start
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Customer Browser                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Video Stream │  │ Voice Audio  │  │ Chat Panel   │      │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
+└─────────┼──────────────────┼──────────────────┼─────────────┘
+          │                  │                  │
+          │             WebSocket               │
+          │                  │                  │
+┌─────────▼──────────────────▼──────────────────▼─────────────┐
+│                    FastAPI Backend                           │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │            Demo Copilot Orchestrator                   │  │
+│  │              (LangGraph + Claude)                      │  │
+│  └────┬─────────────┬─────────────┬─────────────┬────────┘  │
+│       │             │             │             │            │
+│  ┌────▼────┐  ┌────▼────┐  ┌────▼────┐  ┌────▼────┐       │
+│  │ Browser │  │  Voice  │  │Question │  │  Demo   │       │
+│  │Controller│  │ Engine  │  │ Handler │  │ Scripts │       │
+│  │(Playwright)│(ElevenLabs)│(Claude)  │  │         │       │
+│  └─────────┘  └─────────┘  └─────────┘  └─────────┘       │
+└──────────────────────────────────────────────────────────────┘
+          │                                      │
+          │                                      │
+┌─────────▼──────────┐                 ┌────────▼──────────┐
+│  Product Instance  │                 │   PostgreSQL      │
+│  (InSign Demo)     │                 │  (Sessions,       │
+│                    │                 │   Analytics)      │
+└────────────────────┘                 └───────────────────┘
+```
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture documentation.
+
+---
+
+## ✨ Features
+
+### 🎬 Autonomous Demos
+- Full product walkthroughs without human intervention
+- Natural mouse movements and typing
+- Realistic pauses and pacing
+- Error recovery and retry logic
+
+### 🗣️ Natural Voice Narration
+- Multiple voice options (Rachel, Drew, Paul)
+- Contextual explanations
+- Adjustable speed and tone
+- Synchronized with browser actions
+
+### 💬 Intelligent Q&A
+- Real-time question answering
+- Intent classification (pricing, features, technical, etc.)
+- Sentiment analysis (positive, negative, confused)
+- Priority detection (low, normal, high, critical)
+- Adaptive responses based on customer mood
+
+### 🎯 Demo Adaptation
+- Jump to requested features
+- Deep dive into topics of interest
+- Skip or repeat sections
+- Personalized based on customer profile
+
+### 📊 Analytics
+- Demo completion rates
+- Question tracking
+- Feature interest heatmaps
+- Customer sentiment trends
+- Engagement scoring
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
 - Python 3.10+
-- Node.js 18+ (for frontend)
-- API Keys:
-  - Anthropic (Claude)
-  - ElevenLabs (for voice)
+- Node.js 18+
+- Git
 
-### 1. Install Dependencies
+### 1. Clone & Setup
 
 ```bash
-# Install Python dependencies
-pip install -r requirements.txt
+# Clone the repository
+git clone https://github.com/numberlabs/demo-copilot.git
+cd demo-copilot
 
-# Install Playwright browsers
-playwright install chromium
-
-# Install frontend dependencies
-cd frontend
-npm install
-cd ..
+# Run automated setup
+./scripts/setup.sh
 ```
 
-### 2. Configure Environment
+This installs all dependencies, sets up virtual environments, and creates configuration files.
+
+### 2. Configure API Keys
 
 ```bash
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your API keys
+# Edit .env file
 nano .env
 ```
 
-Required environment variables:
+Add your API keys:
 ```bash
-ANTHROPIC_API_KEY=your-anthropic-api-key-here
-ELEVENLABS_API_KEY=your-elevenlabs-api-key-here
+ANTHROPIC_API_KEY=your-anthropic-key-here
+ELEVENLABS_API_KEY=your-elevenlabs-key-here
 ```
 
-### 3. Run the Application
-
-**Option A: Simple startup script (recommended)**
+### 3. Start Development
 
 ```bash
-# From project root
+# Start both backend and frontend
+./scripts/start-dev.sh
+
+# Or start backend only
 python run_server.py
 ```
 
-**Option B: Manual startup**
+**Access points:**
+- 🌐 Frontend: http://localhost:3000
+- 📦 Backend API: http://localhost:8000
+- 📚 API Docs: http://localhost:8000/docs
+
+### 4. Verify Health
 
 ```bash
-# Terminal 1: Backend
-python -m backend.api.main
-
-# Terminal 2: Frontend (in separate terminal)
-cd frontend
-npm run dev
+./scripts/check-health.sh
 ```
 
-**Access the application:**
-- Frontend: http://localhost:3000
-- API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+---
 
-## Architecture
+## 📖 Documentation
 
-```
-┌─────────────────────────────────────────────────────────┐
-│              Next.js Frontend (TypeScript)               │
-│       Demo Selection + Live Demo Viewer + Q&A            │
-└──────────────────────┬──────────────────────────────────┘
-                       │ WebSocket + REST API
-┌──────────────────────▼──────────────────────────────────┐
-│                  FastAPI Server                          │
-│         REST API + WebSocket Streaming                   │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│                  Demo Copilot                            │
-│              Main Orchestrator                           │
-└─────┬──────────┬──────────┬──────────┬─────────────────┘
-      │          │          │          │
-   ┌──▼──┐   ┌──▼──┐   ┌──▼──┐   ┌──▼──┐
-   │ 🌐  │   │ 🔊  │   │ 🤖  │   │ 📜  │
-   │Browser│ │Voice│ │ Q&A │ │Script│
-   │Controller│ │Engine│ │Handler│ │     │
-   └─────┘   └─────┘   └─────┘   └─────┘
-   Playwright ElevenLabs Claude   InSign
-```
+| Document | Description |
+|----------|-------------|
+| [API Documentation](docs/API.md) | REST API endpoints and WebSocket protocol |
+| [Architecture Guide](docs/ARCHITECTURE.md) | System design and component details |
+| [Demo Scripts](docs/DEMO_SCRIPTS.md) | How to create custom demo flows |
+| [Deployment Guide](docs/DEPLOYMENT.md) | Production deployment instructions |
+| [Contributing](CONTRIBUTING.md) | Guidelines for contributors |
 
-## Question Handler Capabilities
+---
 
-The intelligent question handler uses Claude AI to:
+## 🎮 Usage Examples
 
-1. **Understand Intent**
-   - Clarification requests
-   - Feature requests
-   - Pricing questions
-   - Comparisons
-   - Technical inquiries
-
-2. **Analyze Sentiment**
-   - Positive, neutral, negative, confused
-   - Adjusts response tone accordingly
-
-3. **Prioritize Questions**
-   - Low, normal, high, critical
-   - Routes complex questions to human sales engineers
-
-4. **Adapt Demo Flow**
-   - Continue current flow
-   - Jump to requested feature
-   - Deep dive into current topic
-   - Schedule human follow-up
-
-5. **Track Customer Interests**
-   - Extract topics of interest
-   - Log for analytics and follow-up
-
-## API Documentation
-
-### Start Demo
+### Start a Demo via API
 
 ```bash
-POST /api/demo/start
-{
-  "demo_type": "insign",
-  "customer_name": "Sarah Johnson",
-  "customer_email": "sarah@company.com",
-  "customer_company": "Acme Corp",
-  "demo_duration": "standard"
-}
+curl -X POST http://localhost:8000/api/demo/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "demo_type": "insign",
+    "customer_name": "Sarah Johnson",
+    "customer_email": "sarah@acme.com",
+    "demo_duration": "standard"
+  }'
 ```
 
-Response:
-```json
-{
-  "session_id": "uuid-here",
-  "status": "started",
-  "demo_type": "insign",
-  "websocket_url": "ws://localhost:8000/ws/demo/{session_id}",
-  "estimated_duration_minutes": 10
-}
-```
-
-### Ask Question
+### Ask a Question
 
 ```bash
-POST /api/demo/{session_id}/question
-{
-  "session_id": "uuid",
-  "question": "Can you show me the mobile app?"
-}
+curl -X POST http://localhost:8000/api/demo/{session_id}/question \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "Can you show me the mobile app?"
+  }'
 ```
 
-Response includes:
-- Natural language answer
-- Action to take (continue, jump_to_feature, etc.)
-- Intent classification
-- Sentiment analysis
-- Priority level
-
-### Control Demo
-
-```bash
-POST /api/demo/{session_id}/control
-{
-  "session_id": "uuid",
-  "action": "pause"  # or "resume", "stop"
-}
-```
-
-### Get Demo Status
-
-```bash
-GET /api/demo/{session_id}/status
-```
-
-Returns current step, progress, messages, etc.
-
-### WebSocket Streaming
+### WebSocket Connection
 
 ```javascript
 const ws = new WebSocket('ws://localhost:8000/ws/demo/{session_id}');
@@ -226,113 +201,133 @@ ws.onmessage = (event) => {
 
   switch(data.type) {
     case 'video_frame':
-      // Display browser screenshot
+      // Display video frame
       break;
     case 'status_update':
-      // Update progress bar
+      // Update progress
       break;
     case 'message':
-      // Display conversation message
+      // Show conversation message
       break;
   }
 };
 ```
 
-## Project Structure
+---
+
+## 🛠️ Development
+
+### Available Scripts
+
+```bash
+./scripts/setup.sh           # Initial setup
+./scripts/start-dev.sh        # Start development servers
+./scripts/stop-dev.sh         # Stop all servers
+./scripts/check-health.sh     # Check system health
+./scripts/reset-demo-env.sh   # Reset environment
+./scripts/test.sh             # Run tests
+```
+
+### Project Structure
 
 ```
 demo-copilot/
 ├── backend/
 │   ├── agents/
 │   │   ├── demo_copilot.py          # Main orchestrator
-│   │   ├── browser_controller.py    # Playwright wrapper
-│   │   ├── voice_engine.py          # ElevenLabs TTS
-│   │   ├── question_handler.py      # Claude Q&A with intent analysis
+│   │   ├── browser_controller.py    # Browser automation
+│   │   ├── voice_engine.py          # Text-to-speech
+│   │   ├── question_handler.py      # Q&A with Claude
 │   │   └── demo_scripts/
 │   │       └── insign_demo.py       # InSign demo flow
 │   ├── api/
 │   │   └── main.py                  # FastAPI server
 │   └── database/
-│       ├── models.py                # SQLAlchemy models
-│       ├── crud.py                  # Database operations
+│       ├── models.py                # Database models
+│       ├── crud.py                  # CRUD operations
 │       └── connection.py            # DB connection
 ├── frontend/
 │   ├── app/
-│   │   ├── page.tsx                 # Home page (demo selection)
-│   │   ├── demo/[sessionId]/
-│   │   │   └── page.tsx             # Demo viewer
-│   │   ├── layout.tsx               # Root layout
-│   │   └── globals.css              # Global styles
-│   ├── components/
-│   │   └── ui/                      # Reusable UI components
-│   ├── package.json
-│   └── tsconfig.json
-├── run_server.py                    # Simple server startup script
+│   │   ├── page.tsx                 # Home page
+│   │   └── demo/[sessionId]/
+│   │       └── page.tsx             # Demo viewer
+│   └── components/
+│       └── ui/                      # UI components
+├── scripts/                         # Automation scripts
+├── docs/                            # Documentation
+├── run_server.py                    # Server launcher
 ├── requirements.txt                 # Python dependencies
-├── .env.example                     # Environment template
-└── README.md
+└── .env.example                     # Environment template
 ```
-
-## Demo Scripts
-
-Demo scripts define the flow, narration, and interactions for each product.
-
-Located at `backend/agents/demo_scripts/`
-
-Each script includes:
-- Step-by-step actions
-- Natural voice narration
-- Browser interactions
-- Feature highlights
-- Customization options
-
-## Development
 
 ### Adding a New Product Demo
 
-1. Create new script in `backend/agents/demo_scripts/`
+1. Create script in `backend/agents/demo_scripts/`
 2. Define demo steps and narration
 3. Add product context to `question_handler.py`
-4. Register script in `demo_copilot.py`
-5. Add product card to frontend `page.tsx`
+4. Register in `demo_copilot.py`
+5. Add product card to frontend
 
-### Testing
+See [docs/DEMO_SCRIPTS.md](docs/DEMO_SCRIPTS.md) for detailed guide.
+
+---
+
+## 🧪 Testing
 
 ```bash
-# Test question handler
+# Run all tests
+./scripts/test.sh
+
+# Backend tests only
 cd backend
-python -m agents.question_handler
+pytest tests/ -v
 
-# Test API endpoints
-curl -X GET http://localhost:8000/health
+# Frontend tests only
+cd frontend
+npm test
 
-# Test demo creation
-curl -X POST http://localhost:8000/api/demo/start \
-  -H "Content-Type: application/json" \
-  -d '{"demo_type": "insign", "customer_email": "test@example.com"}'
+# Check health
+./scripts/check-health.sh
 ```
 
-## Roadmap
+---
+
+## 📊 Current Demos
+
+### InSign (Electronic Signatures)
+- **Duration:** 10 minutes
+- **Features:** Document signing, sending, audit trails
+- **Differentiator:** 50-70% cheaper than DocuSign
+- **Demo Script:** `backend/agents/demo_scripts/insign_demo.py`
+
+### Crew Intelligence (Coming Soon)
+- **Duration:** 15 minutes
+- **Features:** Crew pay, FAA compliance, voice AI
+- **Differentiator:** 30% reduction in pay claims
+- **Status:** In development
+
+---
+
+## 🗺️ Roadmap
 
 ### Phase 1: MVP ✅
 - ✅ InSign demo script
-- ✅ Browser automation
-- ✅ Voice narration
-- ✅ Intelligent question handling with Claude
-- ✅ REST API
+- ✅ Browser automation with Playwright
+- ✅ Voice narration with ElevenLabs
+- ✅ Intelligent Q&A with Claude
+- ✅ REST API and WebSocket streaming
 - ✅ Next.js frontend
-- ✅ WebSocket streaming
 - ✅ Intent analysis and sentiment detection
 
-### Phase 2: Enhancement 🔄
-- [ ] Recording and playback
-- [ ] Demo analytics dashboard
-- [ ] A/B testing for demo scripts
-- [ ] Voice input for questions
-- [ ] Multi-language support
+### Phase 2: Enhancement 🚧
+- ⏳ Recording and playback
+- ⏳ Demo analytics dashboard
+- ⏳ A/B testing for demo scripts
+- ⏳ Voice input for questions
+- ⏳ Multi-language support
 
 ### Phase 3: Scale
-- [ ] Additional product demos (Crew Intelligence)
+- [ ] Crew Intelligence demo
 - [ ] Custom demo builder UI
 - [ ] Lead scoring integration
 - [ ] CRM integration (Salesforce, HubSpot)
@@ -340,51 +335,95 @@ curl -X POST http://localhost:8000/api/demo/start \
 ### Phase 4: Production
 - [ ] Cloud deployment (AWS/GCP)
 - [ ] CDN for video streaming
-- [ ] Load testing and optimization
+- [ ] Load testing & optimization
 - [ ] Security audit
-- [ ] Rate limiting and abuse prevention
+- [ ] Rate limiting
 
-## Troubleshooting
+---
 
-### ModuleNotFoundError
+## 🐛 Troubleshooting
+
+### "ModuleNotFoundError: No module named 'backend'"
 
 Make sure you're running from the project root:
 ```bash
-cd /path/to/demo-pilot
+cd /path/to/demo-copilot
 python run_server.py
 ```
 
-### Playwright browsers not found
+### "Playwright browsers not found"
 
+Install browsers:
 ```bash
 playwright install chromium
 ```
 
-### API keys not working
+### "Port already in use"
 
-Check your `.env` file and make sure keys are set:
+Stop existing servers:
 ```bash
-cat .env
-# Should show ANTHROPIC_API_KEY and ELEVENLABS_API_KEY
+./scripts/stop-dev.sh
 ```
 
-### Frontend can't connect to backend
+### Database errors
 
-Make sure backend is running on port 8000:
+Reset the database:
 ```bash
-curl http://localhost:8000/health
+./scripts/reset-demo-env.sh
 ```
 
-## Contributing
+### More help
 
-This is an internal Number Labs project. For questions or contributions, contact the AI team.
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) or check logs:
+```bash
+tail -f logs/backend.log
+tail -f logs/frontend.log
+```
 
-## License
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
+
+- Code style guidelines
+- Development workflow
+- Pull request process
+- Testing requirements
+
+---
+
+## 📝 License
 
 Proprietary - Number Labs
 
-## Support
+Internal use only. Not for distribution.
 
-For issues or questions:
-- Slack: #ai-demos
-- Email: ai-team@numberlabs.ai
+---
+
+## 🙏 Acknowledgments
+
+Built by the Number Labs AI team:
+- **AI/ML:** Claude Sonnet 4 (Anthropic)
+- **Voice:** ElevenLabs TTS
+- **Browser:** Playwright
+- **Framework:** FastAPI + Next.js
+
+---
+
+## 📧 Support
+
+For questions or issues:
+- 💬 Slack: #ai-demos
+- ✉️ Email: ai-team@numberlabs.ai
+- 📚 Docs: [docs/](docs/)
+
+---
+
+<div align="center">
+
+**[Documentation](docs/) • [API Reference](docs/API.md) • [Architecture](docs/ARCHITECTURE.md)**
+
+Made with ❤️ by Number Labs AI Team
+
+</div>

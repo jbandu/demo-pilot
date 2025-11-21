@@ -38,7 +38,11 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://yourdomain.com"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",  # Next.js dev server
+        "https://yourdomain.com"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -94,8 +98,13 @@ class DemoStatusResponse(BaseModel):
 
 # Database dependency
 async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session
+    """Get database session (returns None if database unavailable)"""
+    try:
+        async with AsyncSessionLocal() as session:
+            yield session
+    except Exception as e:
+        logger.warning(f"Database unavailable: {e}")
+        yield None
 
 
 # Routes
@@ -120,12 +129,12 @@ async def health_check():
 
 
 @app.post("/api/demo/start", response_model=StartDemoResponse)
-async def start_demo(request: StartDemoRequest, db: AsyncSession = Depends(get_db)):
+async def start_demo(request: StartDemoRequest, db: Optional[AsyncSession] = Depends(get_db)):
     """Start a new demo session"""
     try:
         logger.info(f"Starting {request.demo_type} demo for {request.customer_email}")
 
-        # Create demo copilot instance
+        # Create demo copilot instance (db may be None if database unavailable)
         copilot = DemoCopilot(database_session=db)
 
         # Build customer context
@@ -330,12 +339,13 @@ async def websocket_demo_stream(websocket: WebSocket, session_id: str):
 
 
 @app.get("/api/demos")
-async def list_demos(db: AsyncSession = Depends(get_db)):
+async def list_demos(db: Optional[AsyncSession] = Depends(get_db)):
     """List all demo sessions (for analytics)"""
     # Query database for demo sessions
     # This is a placeholder - implement based on your database layer
     return {
         "active_demos": len(active_demos),
+        "database_available": db is not None,
         "sessions": [
             {
                 "session_id": sid,
@@ -348,10 +358,11 @@ async def list_demos(db: AsyncSession = Depends(get_db)):
 
 
 @app.get("/api/analytics/summary")
-async def analytics_summary(db: AsyncSession = Depends(get_db)):
+async def analytics_summary(db: Optional[AsyncSession] = Depends(get_db)):
     """Get analytics summary"""
     # Implement analytics queries
     return {
+        "database_available": db is not None,
         "total_demos_today": 0,  # Query from DB
         "completion_rate": 0.0,
         "avg_duration_minutes": 0.0,
@@ -365,11 +376,15 @@ async def startup_event():
     """Initialize on startup"""
     logger.info("Demo Copilot API starting up...")
 
-    # Create database tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    logger.info("Database initialized")
+    # Try to create database tables (gracefully handle if DB not available)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.warning(f"Could not connect to database: {e}")
+        logger.warning("Backend will run without database. Some features may not work.")
+        logger.warning("To fix: Set DATABASE_URL in .env or set up PostgreSQL")
 
 
 @app.on_event("shutdown")

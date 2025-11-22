@@ -48,22 +48,44 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS
+# CORS - Allow frontend to connect
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",  # Next.js dev server
+    frontend_url,  # Production frontend from env
+]
+# Add Railway frontend if available
+if os.getenv("RAILWAY_ENVIRONMENT"):
+    railway_frontend = os.getenv("RAILWAY_STATIC_URL", "")
+    if railway_frontend:
+        allowed_origins.append(railway_frontend)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",  # Next.js dev server
-        "https://yourdomain.com"
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Database
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/demo_copilot")
+def fix_database_url(url: str) -> str:
+    """
+    Convert Railway/standard postgres:// URL to asyncpg format.
+    Railway provides postgresql:// but we need postgresql+asyncpg:// for async support.
+    """
+    if url and url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif url and url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
+
+raw_database_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/demo_copilot")
+DATABASE_URL = fix_database_url(raw_database_url)
 SKIP_DATABASE = os.getenv("SKIP_DATABASE", "false").lower() in ("true", "1", "yes")
+
+logger.info(f"Database URL protocol: {DATABASE_URL.split('://')[0] if '://' in DATABASE_URL else 'unknown'}")
 
 # Only create engine if not skipping database
 engine = None

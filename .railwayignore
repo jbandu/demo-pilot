@@ -1,0 +1,68 @@
+# Railway Ignore File
+# Files and directories to exclude from Railway deployments
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation (not needed in production)
+*.md
+docs/
+DEPLOYMENT.md
+RAILWAY.md
+README.md
+
+# Local development
+.env
+.env.local
+.env.*.local
+venv/
+env/
+*.pyc
+__pycache__/
+.pytest_cache/
+.coverage
+
+# Frontend (when deploying backend)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Backend (when deploying frontend)
+backend/venv/
+backend/__pycache__/
+backend/.pytest_cache/
+backend/recordings/
+backend/audio_cache/
+backend/demo-environments/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files
+tests/
+*.test.js
+*.spec.js
+*.test.py
+*.spec.py
+
+# Build artifacts (depends on service)
+dist/
+build/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Docker (Railway uses its own)
+docker-compose.yml
+Dockerfile.local

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -48,22 +48,44 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS
+# CORS - Allow frontend to connect
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+allowed_origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",  # Next.js dev server
+    frontend_url,  # Production frontend from env
+]
+# Add Railway frontend if available
+if os.getenv("RAILWAY_ENVIRONMENT"):
+    railway_frontend = os.getenv("RAILWAY_STATIC_URL", "")
+    if railway_frontend:
+        allowed_origins.append(railway_frontend)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",  # Next.js dev server
-        "https://yourdomain.com"
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Database
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/demo_copilot")
+def fix_database_url(url: str) -> str:
+    """
+    Convert Railway/standard postgres:// URL to asyncpg format.
+    Railway provides postgresql:// but we need postgresql+asyncpg:// for async support.
+    """
+    if url and url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    elif url and url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return url
+
+raw_database_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/demo_copilot")
+DATABASE_URL = fix_database_url(raw_database_url)
 SKIP_DATABASE = os.getenv("SKIP_DATABASE", "false").lower() in ("true", "1", "yes")
+
+logger.info(f"Database URL protocol: {DATABASE_URL.split('://')[0] if '://' in DATABASE_URL else 'unknown'}")
 
 # Only create engine if not skipping database
 engine = None
@@ -259,6 +281,62 @@ async def ask_question(session_id: str, request: AskQuestionRequest):
         }
     except Exception as e:
         logger.error(f"Error processing question: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/demo/{session_id}/voice-input")
+async def voice_input(session_id: str, audio: UploadFile = File(...)):
+    """
+    Process voice input during demo.
+    Flow:
+    1. Pause demo
+    2. Transcribe audio with Whisper
+    3. Process as question/command
+    4. Resume or navigate demo
+    """
+    copilot = active_demos.get(session_id)
+
+    if not copilot:
+        raise HTTPException(status_code=404, detail="Demo session not found")
+
+    try:
+        logger.info(f"Voice input received for session {session_id}, file: {audio.filename}")
+
+        # Pause demo while processing voice input
+        await copilot.pause_demo()
+
+        # Read audio file
+        audio_bytes = await audio.read()
+
+        # Transcribe using Whisper
+        transcribed_text = await copilot.voice_engine.speech_to_text(audio_bytes=audio_bytes)
+        logger.info(f"Transcribed voice input: {transcribed_text}")
+
+        if not transcribed_text or transcribed_text.strip() == "":
+            # Resume demo if transcription failed
+            await copilot.resume_demo()
+            raise HTTPException(status_code=400, detail="Could not transcribe audio")
+
+        # Process as a question (uses existing question handler)
+        await copilot.ask_question(transcribed_text)
+
+        # Resume demo after answering
+        await copilot.resume_demo()
+
+        return {
+            "status": "voice_input_processed",
+            "session_id": session_id,
+            "transcribed_text": transcribed_text,
+            "action": "answered_and_resumed"
+        }
+
+    except Exception as e:
+        logger.error(f"Error processing voice input: {e}", exc_info=True)
+        # Try to resume demo even if there was an error
+        try:
+            await copilot.resume_demo()
+        except:
+            pass
         raise HTTPException(status_code=500, detail=str(e))
 
 

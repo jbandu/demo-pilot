@@ -169,6 +169,9 @@ class BrowserController:
         logger.info(f"Clicking: {selector} ({description})")
 
         try:
+            # Wait for element to be visible and clickable (increased timeout)
+            await self.page.wait_for_selector(selector, state="visible", timeout=60000)
+
             # Scroll element into view first
             await self.smooth_scroll_to(selector)
             await asyncio.sleep(self._random_delay(0.3, 0.7))
@@ -188,8 +191,8 @@ class BrowserController:
                     await self.page.mouse.move(x, y, steps=random.randint(5, 15))
                     await asyncio.sleep(self._random_delay(0.1, 0.3))
 
-            # Click with random delay
-            await self.page.click(selector, delay=random.randint(50, 150))
+            # Click with random delay and increased timeout
+            await self.page.click(selector, delay=random.randint(50, 150), timeout=60000)
             await asyncio.sleep(self._random_delay(0.3, 0.8))
 
             await self._log_action("click", {

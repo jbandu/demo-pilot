@@ -38,11 +38,13 @@ class VoiceEngine:
         else:
             logger.warning("ELEVENLABS_API_KEY not set - demos will run without voice")
 
-        # Voice configuration
-        self.voice_id = "EXAVITQu4vr4xnSDxMaL"  # Rachel (professional female)
-        # Alternative voices:
+        # Voice configuration - use custom voice from environment, or default to Rachel
+        self.voice_id = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
+        # Default: "EXAVITQu4vr4xnSDxMaL" - Rachel (professional female)
+        # Alternative built-in voices:
         # "pNInz6obpgDQGcFmaJgB" - Adam (professional male)
         # "21m00Tcm4TlvDq8ikWAM" - Antoni (calm, narration)
+        # Or use your custom cloned voice ID from ElevenLabs
 
         self.voice_settings = VoiceSettings(
             stability=0.5,  # 0-1: Lower = more expressive, Higher = more stable
@@ -244,6 +246,8 @@ class VoiceEngine:
         """
         Play audio on the local machine (for development/testing).
         Requires mpg123, ffplay, or similar installed.
+
+        IMPORTANT: This method BLOCKS until audio finishes playing to prevent overlapping audio.
         """
         try:
             # Save to temporary file
@@ -253,30 +257,40 @@ class VoiceEngine:
 
             # Try different audio players
             players = ['mpg123', 'ffplay', 'mpv', 'vlc']
+            player_found = False
+
             for player in players:
                 try:
+                    logger.info(f"Playing audio using {player}")
+
                     if player == 'ffplay':
                         # ffplay needs -nodisp -autoexit flags
-                        subprocess.Popen(
-                            [player, '-nodisp', '-autoexit', temp_path],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL
+                        result = await asyncio.create_subprocess_exec(
+                            player, '-nodisp', '-autoexit', temp_path,
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.DEVNULL
                         )
                     else:
-                        subprocess.Popen(
-                            [player, temp_path],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL
+                        # Run audio player and WAIT for it to finish (blocks until done)
+                        result = await asyncio.create_subprocess_exec(
+                            player, temp_path,
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.DEVNULL
                         )
-                    logger.info(f"Playing audio using {player}")
+
+                    # CRITICAL: Wait for audio to finish playing before continuing
+                    await result.wait()
+                    player_found = True
+                    logger.info(f"Audio playback completed with {player}")
                     break
+
                 except FileNotFoundError:
                     continue
-            else:
+
+            if not player_found:
                 logger.warning("No audio player found. Install mpg123, ffplay, mpv, or vlc to play audio locally.")
 
-            # Clean up temp file after a delay
-            await asyncio.sleep(0.5)
+            # Clean up temp file
             try:
                 os.unlink(temp_path)
             except:

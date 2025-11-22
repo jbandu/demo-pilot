@@ -49,6 +49,10 @@ recordings/
 *.webm
 *.mp4
 
+# Audio Cache
+audio_cache/
+*.mp3
+
 # Logs
 *.log
 logs/

@@ -1,5 +1,6 @@
 import asyncio
 import os
+import hashlib
 from typing import Optional, Dict, Any
 from elevenlabs.client import ElevenLabs
 from elevenlabs import VoiceSettings
@@ -50,8 +51,13 @@ class VoiceEngine:
             use_speaker_boost=True
         )
 
-        # Audio cache
+        # Audio cache (in-memory)
         self.audio_cache: Dict[str, bytes] = {}
+
+        # Persistent cache directory (on disk - survives server restarts)
+        self.cache_dir = Path(os.getenv("AUDIO_CACHE_DIR", "./audio_cache"))
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Audio cache directory: {self.cache_dir}")
 
     async def text_to_speech(
         self,
@@ -76,13 +82,26 @@ class VoiceEngine:
             return b""
 
         try:
-            # Check cache first
+            # Create cache key from text hash
             cache_key = f"{self.voice_id}:{text}"
+            text_hash = hashlib.md5(cache_key.encode()).hexdigest()
+            cache_file = self.cache_dir / f"{text_hash}.mp3"
+
+            # Check in-memory cache first
             if cache_key in self.audio_cache:
-                logger.info("Using cached audio")
+                logger.info("Using in-memory cached audio")
                 return self.audio_cache[cache_key]
 
+            # Check persistent disk cache
+            if cache_file.exists():
+                logger.info(f"Using disk-cached audio from {cache_file.name}")
+                audio_bytes = cache_file.read_bytes()
+                # Also populate in-memory cache for faster access
+                self.audio_cache[cache_key] = audio_bytes
+                return audio_bytes
+
             # Generate full audio (better quality) using new client API
+            logger.info("Generating new audio via ElevenLabs API...")
             audio_generator = self.elevenlabs_client.generate(
                 text=text,
                 voice=self.voice_id,
@@ -93,8 +112,10 @@ class VoiceEngine:
             # Collect all audio chunks into bytes
             audio_bytes = b"".join(audio_generator)
 
-            # Cache the audio
+            # Cache the audio (both in-memory and on disk)
             self.audio_cache[cache_key] = audio_bytes
+            cache_file.write_bytes(audio_bytes)
+            logger.info(f"Audio cached to {cache_file.name}")
 
             # Save to file if requested
             if save_path:

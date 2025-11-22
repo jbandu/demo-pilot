@@ -24,15 +24,15 @@ else:
     load_dotenv()
 
 # Try both import styles to work from any directory
+# When run from project root: use backend.agents...
+# When run from backend dir (Railway/Docker): use agents...
 try:
     from backend.agents.demo_copilot import DemoCopilot
     from backend.database.models import Base
 except ImportError:
-    import sys
-    # Add parent directory to path
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-    from backend.agents.demo_copilot import DemoCopilot
-    from backend.database.models import Base
+    # Running from backend directory (Docker/Railway)
+    from agents.demo_copilot import DemoCopilot
+    from database.models import Base
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker

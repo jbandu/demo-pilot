@@ -9,6 +9,9 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 # Load environment variables
 backend_dir = Path(__file__).parent
 env_path = backend_dir / ".env"
@@ -43,7 +46,7 @@ print(f"DATABASE_URL: {DATABASE_URL}")
 print()
 
 # Check URL format
-if DATABASE_URL.startswith("postgresql://"):
+if DATABASE_URL.startswith("postgresql://") and "+asyncpg" not in DATABASE_URL:
     print("⚠ WARNING: Using 'postgresql://' protocol")
     print("   For async connections, you should use 'postgresql+asyncpg://'")
     print()
@@ -108,6 +111,7 @@ try:
         print("✓ DATABASE TEST PASSED")
         print()
         print("You can now set SKIP_DATABASE=false in your .env file")
+        print("and restart the server to use the database.")
     else:
         print("❌ DATABASE TEST FAILED")
         print()
@@ -117,10 +121,11 @@ try:
     sys.exit(0 if success else 1)
 
 except ImportError as e:
-    print(f"❌ Missing required package: {e}")
+    print(f"❌ Import error: {e}")
     print()
-    print("Install required packages:")
-    print("  pip install sqlalchemy asyncpg")
+    print("Make sure you're running this from the backend directory:")
+    print("  cd ~/demo-pilot/backend")
+    print("  python test_database.py")
     sys.exit(1)
 except Exception as e:
     print(f"❌ Unexpected error: {e}")

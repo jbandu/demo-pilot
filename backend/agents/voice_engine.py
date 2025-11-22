@@ -1,11 +1,14 @@
 import asyncio
 import os
+import hashlib
 from typing import Optional, Dict, Any
 from elevenlabs.client import ElevenLabs
 from elevenlabs import VoiceSettings
 from openai import AsyncOpenAI
 import io
 import logging
+import tempfile
+import subprocess
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -48,8 +51,13 @@ class VoiceEngine:
             use_speaker_boost=True
         )
 
-        # Audio cache
+        # Audio cache (in-memory)
         self.audio_cache: Dict[str, bytes] = {}
+
+        # Persistent cache directory (on disk - survives server restarts)
+        self.cache_dir = Path(os.getenv("AUDIO_CACHE_DIR", "./audio_cache"))
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Audio cache directory: {self.cache_dir}")
 
     async def text_to_speech(
         self,
@@ -74,13 +82,26 @@ class VoiceEngine:
             return b""
 
         try:
-            # Check cache first
+            # Create cache key from text hash
             cache_key = f"{self.voice_id}:{text}"
+            text_hash = hashlib.md5(cache_key.encode()).hexdigest()
+            cache_file = self.cache_dir / f"{text_hash}.mp3"
+
+            # Check in-memory cache first
             if cache_key in self.audio_cache:
-                logger.info("Using cached audio")
+                logger.info("Using in-memory cached audio")
                 return self.audio_cache[cache_key]
 
+            # Check persistent disk cache
+            if cache_file.exists():
+                logger.info(f"Using disk-cached audio from {cache_file.name}")
+                audio_bytes = cache_file.read_bytes()
+                # Also populate in-memory cache for faster access
+                self.audio_cache[cache_key] = audio_bytes
+                return audio_bytes
+
             # Generate full audio (better quality) using new client API
+            logger.info("Generating new audio via ElevenLabs API...")
             audio_generator = self.elevenlabs_client.generate(
                 text=text,
                 voice=self.voice_id,
@@ -91,8 +112,10 @@ class VoiceEngine:
             # Collect all audio chunks into bytes
             audio_bytes = b"".join(audio_generator)
 
-            # Cache the audio
+            # Cache the audio (both in-memory and on disk)
             self.audio_cache[cache_key] = audio_bytes
+            cache_file.write_bytes(audio_bytes)
+            logger.info(f"Audio cached to {cache_file.name}")
 
             # Save to file if requested
             if save_path:
@@ -206,12 +229,61 @@ class VoiceEngine:
         word_count = len(text.split())
         duration_ms = int((word_count / 150) * 60 * 1000)
 
+        # Play audio locally if enabled (for testing/development)
+        if audio_bytes and os.getenv("PLAY_AUDIO_LOCALLY", "false").lower() in ("true", "1", "yes"):
+            await self._play_audio_locally(audio_bytes)
+
         return {
             "audio_bytes": audio_bytes,
             "duration_ms": duration_ms,
             "file_path": save_path,
             "text": text
         }
+
+    async def _play_audio_locally(self, audio_bytes: bytes):
+        """
+        Play audio on the local machine (for development/testing).
+        Requires mpg123, ffplay, or similar installed.
+        """
+        try:
+            # Save to temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
+                temp_file.write(audio_bytes)
+                temp_path = temp_file.name
+
+            # Try different audio players
+            players = ['mpg123', 'ffplay', 'mpv', 'vlc']
+            for player in players:
+                try:
+                    if player == 'ffplay':
+                        # ffplay needs -nodisp -autoexit flags
+                        subprocess.Popen(
+                            [player, '-nodisp', '-autoexit', temp_path],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
+                    else:
+                        subprocess.Popen(
+                            [player, temp_path],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
+                    logger.info(f"Playing audio using {player}")
+                    break
+                except FileNotFoundError:
+                    continue
+            else:
+                logger.warning("No audio player found. Install mpg123, ffplay, mpv, or vlc to play audio locally.")
+
+            # Clean up temp file after a delay
+            await asyncio.sleep(0.5)
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+
+        except Exception as e:
+            logger.error(f"Error playing audio locally: {e}")
 
     def get_available_voices(self) -> list:
         """Get list of available ElevenLabs voices"""

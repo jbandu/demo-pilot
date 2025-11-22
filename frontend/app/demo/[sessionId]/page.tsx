@@ -304,10 +304,10 @@ export default function DemoPage() {
                     <Send className="w-4 h-4" />
                   </Button>
                   <Button
-                    variant={isRecording ? "destructive" : "outline"}
+                    variant={isRecording ? "default" : "outline"}
                     onClick={toggleVoiceInput}
                     disabled={loading}
-                    className={isRecording ? "animate-pulse" : ""}
+                    className={isRecording ? "bg-red-600 hover:bg-red-700 animate-pulse" : ""}
                   >
                     <Mic className="w-4 h-4" />
                   </Button>

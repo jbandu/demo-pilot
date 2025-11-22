@@ -68,6 +68,7 @@ print()
 
 try:
     from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy import text
     from backend.database.models import Base
 
     # Create engine
@@ -82,7 +83,7 @@ try:
                 print("✓ Database tables created/verified")
 
                 # Test a simple query
-                result = await conn.execute("SELECT 1 as test")
+                result = await conn.execute(text("SELECT 1 as test"))
                 row = result.first()
                 if row:
                     print(f"✓ Test query successful: {row[0]}")

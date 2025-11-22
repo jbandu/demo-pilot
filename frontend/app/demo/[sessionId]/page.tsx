@@ -25,18 +25,26 @@ export default function DemoPage() {
   const params = useParams();
   const sessionId = params.sessionId as string;
 
+  // Get backend URL from environment (production) or use localhost (development)
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  const wsUrl = backendUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+
   const [status, setStatus] = useState<DemoStatus | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [question, setQuestion] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingStatus, setRecordingStatus] = useState('');
 
   const wsRef = useRef<WebSocket | null>(null);
   const videoRef = useRef<HTMLCanvasElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     // Connect to WebSocket
-    const ws = new WebSocket(`ws://localhost:8000/ws/demo/${sessionId}`);
+    const ws = new WebSocket(`${wsUrl}/ws/demo/${sessionId}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -85,7 +93,7 @@ export default function DemoPage() {
 
   const fetchStatus = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/demo/${sessionId}/status`);
+      const response = await fetch(`${backendUrl}/api/demo/${sessionId}/status`);
       const data = await response.json();
       setStatus(data);
     } catch (error) {
@@ -97,7 +105,7 @@ export default function DemoPage() {
     const action = isPaused ? 'resume' : 'pause';
 
     try {
-      await fetch(`http://localhost:8000/api/demo/${sessionId}/control`, {
+      await fetch(`${backendUrl}/api/demo/${sessionId}/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, action }),
@@ -110,7 +118,7 @@ export default function DemoPage() {
 
   const handleStop = async () => {
     try {
-      await fetch(`http://localhost:8000/api/demo/${sessionId}/control`, {
+      await fetch(`${backendUrl}/api/demo/${sessionId}/control`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, action: 'stop' }),
@@ -126,7 +134,7 @@ export default function DemoPage() {
 
     setLoading(true);
     try {
-      await fetch(`http://localhost:8000/api/demo/${sessionId}/question`, {
+      await fetch(`${backendUrl}/api/demo/${sessionId}/question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, question }),
@@ -137,6 +145,86 @@ export default function DemoPage() {
       console.error('Error asking question:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const startVoiceInput = async () => {
+    try {
+      setRecordingStatus('Requesting microphone access...');
+
+      // Request microphone permission
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // Create MediaRecorder
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      // Collect audio chunks
+      mediaRecorder.addEventListener('dataavailable', (event) => {
+        audioChunksRef.current.push(event.data);
+      });
+
+      // Handle recording stop
+      mediaRecorder.addEventListener('stop', async () => {
+        setRecordingStatus('Processing...');
+
+        // Create audio blob
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+
+        // Send to backend
+        const formData = new FormData();
+        formData.append('audio', audioBlob, 'voice-input.webm');
+
+        try {
+          const response = await fetch(`${backendUrl}/api/demo/${sessionId}/voice-input`, {
+            method: 'POST',
+            body: formData,
+          });
+
+          const result = await response.json();
+          console.log('Voice input processed:', result);
+
+          setRecordingStatus(`You said: "${result.transcribed_text}"`);
+
+          // Clear status after 3 seconds
+          setTimeout(() => setRecordingStatus(''), 3000);
+
+        } catch (error) {
+          console.error('Error processing voice input:', error);
+          setRecordingStatus('Error processing voice input');
+          setTimeout(() => setRecordingStatus(''), 3000);
+        }
+
+        // Stop all audio tracks
+        stream.getTracks().forEach(track => track.stop());
+        setIsRecording(false);
+      });
+
+      // Start recording
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingStatus('Listening... Click again to stop');
+
+    } catch (error) {
+      console.error('Error accessing microphone:', error);
+      setRecordingStatus('Microphone access denied');
+      setTimeout(() => setRecordingStatus(''), 3000);
+    }
+  };
+
+  const stopVoiceInput = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setRecordingStatus('Processing your input...');
+    }
+  };
+
+  const toggleVoiceInput = () => {
+    if (isRecording) {
+      stopVoiceInput();
+    } else {
+      startVoiceInput();
     }
   };
 
@@ -203,19 +291,35 @@ export default function DemoPage() {
 
             {/* Question Input */}
             <Card className="mt-4 p-4">
-              <div className="flex items-center space-x-2">
-                <Input
-                  placeholder="Ask a question or request a feature..."
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleAskQuestion()}
-                />
-                <Button onClick={handleAskQuestion} disabled={loading}>
-                  <Send className="w-4 h-4" />
-                </Button>
-                <Button variant="outline">
-                  <Mic className="w-4 h-4" />
-                </Button>
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Input
+                    placeholder="Ask a question or request a feature..."
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleAskQuestion()}
+                    disabled={isRecording}
+                  />
+                  <Button onClick={handleAskQuestion} disabled={loading || isRecording}>
+                    <Send className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant={isRecording ? "destructive" : "outline"}
+                    onClick={toggleVoiceInput}
+                    disabled={loading}
+                    className={isRecording ? "animate-pulse" : ""}
+                  >
+                    <Mic className="w-4 h-4" />
+                  </Button>
+                </div>
+                {recordingStatus && (
+                  <div className="text-sm text-gray-600 flex items-center">
+                    {isRecording && (
+                      <div className="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse" />
+                    )}
+                    {recordingStatus}
+                  </div>
+                )}
               </div>
             </Card>
           </div>

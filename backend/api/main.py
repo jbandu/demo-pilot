@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -281,6 +281,62 @@ async def ask_question(session_id: str, request: AskQuestionRequest):
         }
     except Exception as e:
         logger.error(f"Error processing question: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/demo/{session_id}/voice-input")
+async def voice_input(session_id: str, audio: UploadFile = File(...)):
+    """
+    Process voice input during demo.
+    Flow:
+    1. Pause demo
+    2. Transcribe audio with Whisper
+    3. Process as question/command
+    4. Resume or navigate demo
+    """
+    copilot = active_demos.get(session_id)
+
+    if not copilot:
+        raise HTTPException(status_code=404, detail="Demo session not found")
+
+    try:
+        logger.info(f"Voice input received for session {session_id}, file: {audio.filename}")
+
+        # Pause demo while processing voice input
+        await copilot.pause_demo()
+
+        # Read audio file
+        audio_bytes = await audio.read()
+
+        # Transcribe using Whisper
+        transcribed_text = await copilot.voice_engine.speech_to_text(audio_bytes=audio_bytes)
+        logger.info(f"Transcribed voice input: {transcribed_text}")
+
+        if not transcribed_text or transcribed_text.strip() == "":
+            # Resume demo if transcription failed
+            await copilot.resume_demo()
+            raise HTTPException(status_code=400, detail="Could not transcribe audio")
+
+        # Process as a question (uses existing question handler)
+        await copilot.ask_question(transcribed_text)
+
+        # Resume demo after answering
+        await copilot.resume_demo()
+
+        return {
+            "status": "voice_input_processed",
+            "session_id": session_id,
+            "transcribed_text": transcribed_text,
+            "action": "answered_and_resumed"
+        }
+
+    except Exception as e:
+        logger.error(f"Error processing voice input: {e}", exc_info=True)
+        # Try to resume demo even if there was an error
+        try:
+            await copilot.resume_demo()
+        except:
+            pass
         raise HTTPException(status_code=500, detail=str(e))
 
 

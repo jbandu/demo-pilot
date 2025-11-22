@@ -6,6 +6,8 @@ from elevenlabs import VoiceSettings
 from openai import AsyncOpenAI
 import io
 import logging
+import tempfile
+import subprocess
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -206,12 +208,61 @@ class VoiceEngine:
         word_count = len(text.split())
         duration_ms = int((word_count / 150) * 60 * 1000)
 
+        # Play audio locally if enabled (for testing/development)
+        if audio_bytes and os.getenv("PLAY_AUDIO_LOCALLY", "false").lower() in ("true", "1", "yes"):
+            await self._play_audio_locally(audio_bytes)
+
         return {
             "audio_bytes": audio_bytes,
             "duration_ms": duration_ms,
             "file_path": save_path,
             "text": text
         }
+
+    async def _play_audio_locally(self, audio_bytes: bytes):
+        """
+        Play audio on the local machine (for development/testing).
+        Requires mpg123, ffplay, or similar installed.
+        """
+        try:
+            # Save to temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
+                temp_file.write(audio_bytes)
+                temp_path = temp_file.name
+
+            # Try different audio players
+            players = ['mpg123', 'ffplay', 'mpv', 'vlc']
+            for player in players:
+                try:
+                    if player == 'ffplay':
+                        # ffplay needs -nodisp -autoexit flags
+                        subprocess.Popen(
+                            [player, '-nodisp', '-autoexit', temp_path],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
+                    else:
+                        subprocess.Popen(
+                            [player, temp_path],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
+                    logger.info(f"Playing audio using {player}")
+                    break
+                except FileNotFoundError:
+                    continue
+            else:
+                logger.warning("No audio player found. Install mpg123, ffplay, mpv, or vlc to play audio locally.")
+
+            # Clean up temp file after a delay
+            await asyncio.sleep(0.5)
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+
+        except Exception as e:
+            logger.error(f"Error playing audio locally: {e}")
 
     def get_available_voices(self) -> list:
         """Get list of available ElevenLabs voices"""

@@ -171,16 +171,19 @@ class DemoCopilot:
     async def _run_workflow(self):
         """Execute the demo workflow"""
         try:
+            logger.info("Starting demo workflow...")
             self.state['status'] = 'running'
             result = await self.graph.ainvoke(self.state)
-            logger.info(f"Demo completed: {result['status']}")
+            logger.info(f"Demo workflow completed: {result['status']}")
+            logger.info(f"Completed {result['current_step']}/{len(result['demo_script'])} steps")
 
         except Exception as e:
-            logger.error(f"Demo error: {e}", exc_info=True)
+            logger.error(f"Demo workflow error: {e}", exc_info=True)
             self.state['status'] = 'error'
             self.state['errors'].append(str(e))
 
         finally:
+            logger.info("Cleaning up demo workflow...")
             await self.cleanup()
 
     async def _initialize_demo(self, state: DemoCopilotState) -> DemoCopilotState:

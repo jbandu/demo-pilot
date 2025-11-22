@@ -30,10 +30,6 @@ RUN mkdir -p /app/recordings /app/demo-environments /app/audio_cache && \
 # Expose port (Railway will override with $PORT)
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')"
-
 # Run the application
 # Use PORT environment variable from Railway, fallback to 8000 for local
 CMD uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}

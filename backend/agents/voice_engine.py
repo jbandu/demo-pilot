@@ -285,26 +285,48 @@ class AudioSynchronizer:
 
     async def _execute_browser_actions(self, actions: list, browser_controller) -> None:
         """Execute list of browser actions sequentially"""
-        for action in actions:
+        logger.info(f"Executing {len(actions)} browser actions...")
+
+        for i, action in enumerate(actions):
             action_type = action.get('type')
+            logger.debug(f"Action {i+1}/{len(actions)}: {action_type}")
 
-            if action_type == 'click':
-                await browser_controller.click(action['selector'])
-            elif action_type == 'type':
-                await browser_controller.type_text(action['selector'], action['text'])
-            elif action_type == 'navigate':
-                await browser_controller.navigate(action['url'])
-            elif action_type == 'upload':
-                await browser_controller.upload_file(action['selector'], action['file_path'])
-            elif action_type == 'wait':
-                await asyncio.sleep(action.get('duration', 1))
-            elif action_type == 'highlight':
-                await browser_controller.highlight(action['selector'])
-            elif action_type == 'scroll':
-                await browser_controller.scroll_to(action['selector'])
+            try:
+                if action_type == 'click':
+                    await browser_controller.click(action['selector'])
+                elif action_type == 'type':
+                    await browser_controller.type_text(action['selector'], action['text'])
+                elif action_type == 'navigate':
+                    await browser_controller.navigate(action['url'])
+                elif action_type == 'upload':
+                    await browser_controller.upload_file(action['selector'], action['file_path'])
+                elif action_type == 'wait':
+                    await asyncio.sleep(action.get('duration', 1))
+                elif action_type == 'highlight':
+                    # Use highlight_element with duration parameter
+                    duration_ms = action.get('duration', 1000)
+                    await browser_controller.highlight_element(
+                        action['selector'],
+                        duration_ms=duration_ms
+                    )
+                elif action_type == 'scroll':
+                    # Handle scroll - can be to selector or direction
+                    if 'selector' in action:
+                        await browser_controller.smooth_scroll_to(action['selector'])
+                    else:
+                        direction = action.get('direction', 'down')
+                        pixels = action.get('pixels', 500)
+                        await browser_controller.scroll(direction, pixels)
+                else:
+                    logger.warning(f"Unknown action type: {action_type}")
 
-            # Brief pause between actions
-            await asyncio.sleep(action.get('delay', 0.5))
+                # Brief pause between actions
+                await asyncio.sleep(action.get('delay', 0.5))
+
+            except Exception as e:
+                logger.error(f"Error executing browser action {action_type}: {e}", exc_info=True)
+                # Continue with next action instead of failing completely
+                continue
 
 
 # Example usage

@@ -15,7 +15,7 @@ pillow==10.4.0
 
 # Voice
 elevenlabs==1.9.0
-openai==1.54.3  # For Whisper
+openai>=1.57.0  # For Whisper - fixed httpx compatibility
 pydub==0.25.1
 
 # Streaming

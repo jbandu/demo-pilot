@@ -32,4 +32,5 @@ EXPOSE 8000
 
 # Run the application
 # Use PORT environment variable from Railway, fallback to 8000 for local
-CMD uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Use exec form to ensure proper signal handling
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

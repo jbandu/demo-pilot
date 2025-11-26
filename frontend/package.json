@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "node server.js",
+    "start": "sh start.sh",
+    "start:docker": "node server.js",
     "start:regular": "next start",
     "lint": "next lint"
   },

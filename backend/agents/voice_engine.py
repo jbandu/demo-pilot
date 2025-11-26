@@ -226,10 +226,20 @@ class VoiceEngine:
         """
         audio_bytes = await self.text_to_speech(text, save_path=save_path)
 
-        # Calculate duration (approximate)
-        # Average speaking rate: ~150 words per minute
-        word_count = len(text.split())
-        duration_ms = int((word_count / 150) * 60 * 1000)
+        # Calculate REAL duration from audio file using pydub
+        duration_ms = 0
+        if audio_bytes:
+            try:
+                from pydub import AudioSegment
+                audio = AudioSegment.from_mp3(io.BytesIO(audio_bytes))
+                duration_ms = len(audio)  # Actual duration in milliseconds
+                logger.debug(f"Actual audio duration: {duration_ms}ms ({duration_ms/1000:.1f}s)")
+            except Exception as e:
+                logger.warning(f"Could not determine audio duration, estimating: {e}")
+                # Fallback: estimate based on word count
+                word_count = len(text.split())
+                duration_ms = int((word_count / 150) * 60 * 1000)
+                logger.debug(f"Estimated audio duration: {duration_ms}ms ({duration_ms/1000:.1f}s)")
 
         # Play audio locally if enabled (for testing/development)
         if audio_bytes and os.getenv("PLAY_AUDIO_LOCALLY", "false").lower() in ("true", "1", "yes"):
@@ -352,30 +362,74 @@ class AudioSynchronizer:
             browser_actions: List of browser actions to perform
             browser_controller: BrowserController instance
         """
-        # Start narration
+        # Estimate audio duration for pacing (will be refined once generated)
+        word_count = len(narration.split())
+        estimated_duration_ms = int((word_count / 150) * 60 * 1000)
+
+        # Start both tasks in parallel
         audio_task = asyncio.create_task(
             self.voice_engine.narrate_and_wait(narration)
         )
 
-        # Start browser actions after brief delay (let narration start first)
-        await asyncio.sleep(0.5)
+        # Smart delay: give audio time to start, but scale with narration length
+        # Shorter narration = shorter delay, longer narration = longer delay (max 2s)
+        start_delay = min(word_count * 0.05, 2.0)  # 50ms per word, max 2 seconds
+        logger.debug(f"Starting browser actions after {start_delay:.2f}s delay")
+        await asyncio.sleep(start_delay)
 
+        # Start browser actions with estimated duration (will adjust on the fly)
         action_task = asyncio.create_task(
-            self._execute_browser_actions(browser_actions, browser_controller)
+            self._execute_browser_actions(
+                browser_actions,
+                browser_controller,
+                audio_duration_ms=estimated_duration_ms
+            )
         )
 
         # Wait for both to complete
         audio_result, _ = await asyncio.gather(audio_task, action_task)
 
+        # Log actual vs estimated duration for tuning
+        actual_duration_ms = audio_result.get('duration_ms', 0)
+        if actual_duration_ms > 0:
+            diff_ms = abs(actual_duration_ms - estimated_duration_ms)
+            logger.debug(
+                f"Audio duration: estimated={estimated_duration_ms}ms, "
+                f"actual={actual_duration_ms}ms, diff={diff_ms}ms"
+            )
+
         return audio_result
 
-    async def _execute_browser_actions(self, actions: list, browser_controller) -> None:
-        """Execute list of browser actions sequentially"""
+    async def _execute_browser_actions(
+        self,
+        actions: list,
+        browser_controller,
+        audio_duration_ms: int = 0
+    ) -> None:
+        """
+        Execute list of browser actions sequentially, paced across audio duration.
+
+        Args:
+            actions: List of browser actions
+            browser_controller: BrowserController instance
+            audio_duration_ms: Duration of narration audio to pace actions across
+        """
         logger.info(f"Executing {len(actions)} browser actions...")
+
+        # Calculate time budget per action to stay in sync with audio
+        if audio_duration_ms > 0 and len(actions) > 0:
+            # Reserve 20% of time for action execution, 80% for pacing delays
+            action_budget_ms = audio_duration_ms * 0.8
+            time_per_action_ms = action_budget_ms / len(actions)
+            logger.debug(f"Pacing actions: {time_per_action_ms:.0f}ms per action")
+        else:
+            time_per_action_ms = 500  # Default 500ms if no audio duration
 
         for i, action in enumerate(actions):
             action_type = action.get('type')
             logger.debug(f"Action {i+1}/{len(actions)}: {action_type}")
+
+            action_start_time = asyncio.get_event_loop().time()
 
             try:
                 if action_type == 'click':
@@ -387,6 +441,7 @@ class AudioSynchronizer:
                 elif action_type == 'upload':
                     await browser_controller.upload_file(action['selector'], action['file_path'])
                 elif action_type == 'wait':
+                    # Wait actions respect their own duration
                     await asyncio.sleep(action.get('duration', 1))
                 elif action_type == 'highlight':
                     # Use highlight_element with duration parameter
@@ -406,8 +461,17 @@ class AudioSynchronizer:
                 else:
                     logger.warning(f"Unknown action type: {action_type}")
 
-                # Brief pause between actions
-                await asyncio.sleep(action.get('delay', 0.5))
+                # Calculate remaining time in action budget and sleep to maintain pace
+                action_elapsed_ms = (asyncio.get_event_loop().time() - action_start_time) * 1000
+
+                # Use action's custom delay if specified, otherwise use pacing delay
+                if 'delay' in action:
+                    pace_delay_ms = action['delay'] * 1000
+                else:
+                    pace_delay_ms = max(0, time_per_action_ms - action_elapsed_ms)
+
+                if pace_delay_ms > 0:
+                    await asyncio.sleep(pace_delay_ms / 1000)
 
             except Exception as e:
                 logger.error(f"Error executing browser action {action_type}: {e}", exc_info=True)

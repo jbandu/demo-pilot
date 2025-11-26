@@ -37,12 +37,22 @@ export default function HomePage() {
 
       const data = await response.json();
 
+      // Check if the response was successful
+      if (!response.ok) {
+        throw new Error(data.detail || 'Failed to start demo');
+      }
+
+      // Validate session_id exists
+      if (!data.session_id) {
+        throw new Error('Invalid response: missing session_id');
+      }
+
       // Navigate to demo page
       router.push(`/demo/${data.session_id}`);
 
     } catch (error) {
       console.error('Error starting demo:', error);
-      alert('Failed to start demo. Please try again.');
+      alert(`Failed to start demo: ${error instanceof Error ? error.message : 'Please try again.'}`);
     } finally {
       setLoading(false);
     }

@@ -50,17 +50,13 @@ app = FastAPI(
 )
 
 # CORS - Allow frontend to connect
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip('/')
 allowed_origins = [
     "http://localhost:3000",
     "http://localhost:3001",  # Next.js dev server
-    frontend_url,  # Production frontend from env
+    "https://demo-pilot-production.up.railway.app",  # Production frontend
+    frontend_url,  # Frontend from env
 ]
-# Add Railway frontend if available
-if os.getenv("RAILWAY_ENVIRONMENT"):
-    railway_frontend = os.getenv("RAILWAY_STATIC_URL", "")
-    if railway_frontend:
-        allowed_origins.append(railway_frontend)
 
 app.add_middleware(
     CORSMiddleware,
@@ -69,6 +65,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# WebSocket URL helper
+def get_ws_url() -> str:
+    """Get WebSocket base URL from environment"""
+    backend_url = os.getenv("BACKEND_URL", "")
+    if backend_url:
+        return backend_url.replace("https://", "wss://").replace("http://", "ws://")
+    return "ws://localhost:8000"
 
 # Database
 def fix_database_url(url: str) -> str:
@@ -230,7 +234,7 @@ async def start_demo(request: StartDemoRequest, db: Optional[AsyncSession] = Dep
             session_id=session_id,
             status='started',
             demo_type=request.demo_type,
-            websocket_url=f"ws://localhost:8000/ws/demo/{session_id}",
+            websocket_url=f"{get_ws_url()}/ws/demo/{session_id}",
             estimated_duration_minutes=estimated_duration
         )
 

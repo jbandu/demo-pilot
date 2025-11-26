@@ -25,7 +25,9 @@ export default function HomePage() {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/demo/start', {
+      // Get backend URL from environment variable
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const response = await fetch(`${backendUrl}/api/demo/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

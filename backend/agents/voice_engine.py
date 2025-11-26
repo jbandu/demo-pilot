@@ -24,7 +24,19 @@ class VoiceEngine:
 
     def __init__(self):
         self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-        self.openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+
+        # Initialize OpenAI client (optional - only needed for voice input transcription)
+        self.openai_client = None
+        if self.openai_api_key:
+            try:
+                self.openai_client = AsyncOpenAI(api_key=self.openai_api_key)
+                logger.info("OpenAI Whisper client initialized for voice transcription")
+            except Exception as e:
+                logger.warning(f"Could not initialize OpenAI client: {e}")
+                logger.warning("Voice input transcription will not be available")
+        else:
+            logger.warning("OPENAI_API_KEY not set - voice input transcription disabled")
 
         # Initialize ElevenLabs client (optional - demos can run without voice)
         self.elevenlabs_client = None
@@ -185,6 +197,9 @@ class VoiceEngine:
         Returns:
             Transcribed text
         """
+        if not self.openai_client:
+            raise RuntimeError("OpenAI client not initialized. Set OPENAI_API_KEY to enable voice transcription.")
+
         logger.info("Transcribing audio...")
 
         try:

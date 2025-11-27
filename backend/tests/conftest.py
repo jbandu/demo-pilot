@@ -10,7 +10,9 @@ from api.main import app
 from database.models import Base
 
 # Test database URL
-TEST_DATABASE_URL = os.getenv('TEST_DATABASE_URL', 'postgresql+asyncpg://user:pass@localhost/demo_copilot_test')
+TEST_DATABASE_URL = os.getenv(
+    "TEST_DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/demo_copilot_test"
+)
 
 
 @pytest.fixture(scope="session")
@@ -65,7 +67,7 @@ def sample_demo_request():
         "customer_name": "Test User",
         "customer_email": "test@example.com",
         "customer_company": "Test Corp",
-        "demo_duration": "quick"
+        "demo_duration": "quick",
     }
 
 
@@ -76,10 +78,12 @@ def mock_anthropic_response():
         "id": "msg_123",
         "type": "message",
         "role": "assistant",
-        "content": [{
-            "type": "text",
-            "text": '{"answer": "Great question!", "action": "continue", "intent": "clarification", "sentiment": "positive", "priority": "normal"}'
-        }],
+        "content": [
+            {
+                "type": "text",
+                "text": '{"answer": "Great question!", "action": "continue", "intent": "clarification", "sentiment": "positive", "priority": "normal"}',
+            }
+        ],
         "model": "claude-sonnet-4-20250514",
-        "stop_reason": "end_turn"
+        "stop_reason": "end_turn",
     }

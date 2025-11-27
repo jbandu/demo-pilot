@@ -36,7 +36,9 @@ class VoiceEngine:
                 logger.warning(f"Could not initialize OpenAI client: {e}")
                 logger.warning("Voice input transcription will not be available")
         else:
-            logger.warning("OPENAI_API_KEY not set - voice input transcription disabled")
+            logger.warning(
+                "OPENAI_API_KEY not set - voice input transcription disabled"
+            )
 
         # Initialize ElevenLabs client (optional - demos can run without voice)
         self.elevenlabs_client = None
@@ -62,7 +64,7 @@ class VoiceEngine:
             stability=0.5,  # 0-1: Lower = more expressive, Higher = more stable
             similarity_boost=0.75,  # 0-1: How closely to match the voice
             style=0.5,  # 0-1: Exaggeration of the style
-            use_speaker_boost=True
+            use_speaker_boost=True,
         )
 
         # Audio cache (in-memory)
@@ -73,11 +75,7 @@ class VoiceEngine:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Audio cache directory: {self.cache_dir}")
 
-    async def text_to_speech(
-        self,
-        text: str,
-        save_path: Optional[str] = None
-    ) -> bytes:
+    async def text_to_speech(self, text: str, save_path: Optional[str] = None) -> bytes:
         """
         Convert text to speech using ElevenLabs.
 
@@ -120,7 +118,7 @@ class VoiceEngine:
                 text=text,
                 voice=self.voice_id,
                 model="eleven_multilingual_v2",  # Best quality
-                voice_settings=self.voice_settings
+                voice_settings=self.voice_settings,
             )
 
             # Collect all audio chunks into bytes
@@ -134,7 +132,7 @@ class VoiceEngine:
             # Save to file if requested
             if save_path:
                 Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-                with open(save_path, 'wb') as f:
+                with open(save_path, "wb") as f:
                     f.write(audio_bytes)
                 logger.info(f"Audio saved to: {save_path}")
 
@@ -170,7 +168,7 @@ class VoiceEngine:
                 voice=self.voice_id,
                 model="eleven_turbo_v2",  # Fastest model
                 stream=True,
-                voice_settings=self.voice_settings
+                voice_settings=self.voice_settings,
             )
 
             # Stream chunks to websocket or audio player
@@ -183,9 +181,7 @@ class VoiceEngine:
             yield b""  # Yield empty bytes instead of crashing
 
     async def speech_to_text(
-        self,
-        audio_file_path: Optional[str] = None,
-        audio_bytes: Optional[bytes] = None
+        self, audio_file_path: Optional[str] = None, audio_bytes: Optional[bytes] = None
     ) -> str:
         """
         Convert speech to text using OpenAI Whisper.
@@ -198,17 +194,17 @@ class VoiceEngine:
             Transcribed text
         """
         if not self.openai_client:
-            raise RuntimeError("OpenAI client not initialized. Set OPENAI_API_KEY to enable voice transcription.")
+            raise RuntimeError(
+                "OpenAI client not initialized. Set OPENAI_API_KEY to enable voice transcription."
+            )
 
         logger.info("Transcribing audio...")
 
         try:
             if audio_file_path:
-                with open(audio_file_path, 'rb') as audio_file:
+                with open(audio_file_path, "rb") as audio_file:
                     transcript = await self.openai_client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        language="en"
+                        model="whisper-1", file=audio_file, language="en"
                     )
             elif audio_bytes:
                 # Create file-like object from bytes
@@ -216,9 +212,7 @@ class VoiceEngine:
                 audio_file.name = "audio.wav"
 
                 transcript = await self.openai_client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    language="en"
+                    model="whisper-1", file=audio_file, language="en"
                 )
             else:
                 raise ValueError("Must provide either audio_file_path or audio_bytes")
@@ -231,7 +225,9 @@ class VoiceEngine:
             logger.error(f"Error transcribing audio: {e}")
             raise
 
-    async def narrate_and_wait(self, text: str, save_path: Optional[str] = None) -> Dict[str, Any]:
+    async def narrate_and_wait(
+        self, text: str, save_path: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Generate speech and return audio info (duration, file path, etc).
         Used for synchronizing narration with browser actions.
@@ -246,25 +242,34 @@ class VoiceEngine:
         if audio_bytes:
             try:
                 from pydub import AudioSegment
+
                 audio = AudioSegment.from_mp3(io.BytesIO(audio_bytes))
                 duration_ms = len(audio)  # Actual duration in milliseconds
-                logger.debug(f"Actual audio duration: {duration_ms}ms ({duration_ms/1000:.1f}s)")
+                logger.debug(
+                    f"Actual audio duration: {duration_ms}ms ({duration_ms/1000:.1f}s)"
+                )
             except Exception as e:
                 logger.warning(f"Could not determine audio duration, estimating: {e}")
                 # Fallback: estimate based on word count
                 word_count = len(text.split())
                 duration_ms = int((word_count / 150) * 60 * 1000)
-                logger.debug(f"Estimated audio duration: {duration_ms}ms ({duration_ms/1000:.1f}s)")
+                logger.debug(
+                    f"Estimated audio duration: {duration_ms}ms ({duration_ms/1000:.1f}s)"
+                )
 
         # Play audio locally if enabled (for testing/development)
-        if audio_bytes and os.getenv("PLAY_AUDIO_LOCALLY", "false").lower() in ("true", "1", "yes"):
+        if audio_bytes and os.getenv("PLAY_AUDIO_LOCALLY", "false").lower() in (
+            "true",
+            "1",
+            "yes",
+        ):
             await self._play_audio_locally(audio_bytes)
 
         return {
             "audio_bytes": audio_bytes,
             "duration_ms": duration_ms,
             "file_path": save_path,
-            "text": text
+            "text": text,
         }
 
     async def _play_audio_locally(self, audio_bytes: bytes):
@@ -276,31 +281,35 @@ class VoiceEngine:
         """
         try:
             # Save to temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_file:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
                 temp_file.write(audio_bytes)
                 temp_path = temp_file.name
 
             # Try different audio players
-            players = ['mpg123', 'ffplay', 'mpv', 'vlc']
+            players = ["mpg123", "ffplay", "mpv", "vlc"]
             player_found = False
 
             for player in players:
                 try:
                     logger.info(f"Playing audio using {player}")
 
-                    if player == 'ffplay':
+                    if player == "ffplay":
                         # ffplay needs -nodisp -autoexit flags
                         result = await asyncio.create_subprocess_exec(
-                            player, '-nodisp', '-autoexit', temp_path,
+                            player,
+                            "-nodisp",
+                            "-autoexit",
+                            temp_path,
                             stdout=asyncio.subprocess.DEVNULL,
-                            stderr=asyncio.subprocess.DEVNULL
+                            stderr=asyncio.subprocess.DEVNULL,
                         )
                     else:
                         # Run audio player and WAIT for it to finish (blocks until done)
                         result = await asyncio.create_subprocess_exec(
-                            player, temp_path,
+                            player,
+                            temp_path,
                             stdout=asyncio.subprocess.DEVNULL,
-                            stderr=asyncio.subprocess.DEVNULL
+                            stderr=asyncio.subprocess.DEVNULL,
                         )
 
                     # CRITICAL: Wait for audio to finish playing before continuing
@@ -313,7 +322,9 @@ class VoiceEngine:
                     continue
 
             if not player_found:
-                logger.warning("No audio player found. Install mpg123, ffplay, mpv, or vlc to play audio locally.")
+                logger.warning(
+                    "No audio player found. Install mpg123, ffplay, mpv, or vlc to play audio locally."
+                )
 
             # Clean up temp file
             try:
@@ -333,8 +344,8 @@ class VoiceEngine:
                 {
                     "voice_id": voice.voice_id,
                     "name": voice.name,
-                    "category": getattr(voice, 'category', ''),
-                    "description": getattr(voice, 'description', '')
+                    "category": getattr(voice, "category", ""),
+                    "description": getattr(voice, "description", ""),
                 }
                 for voice in available_voices.voices
             ]
@@ -364,10 +375,7 @@ class AudioSynchronizer:
         self.current_audio_task: Optional[asyncio.Task] = None
 
     async def sync_narrate_and_act(
-        self,
-        narration: str,
-        browser_actions: list,
-        browser_controller
+        self, narration: str, browser_actions: list, browser_controller
     ) -> None:
         """
         Run narration and browser actions in parallel, synchronized.
@@ -382,9 +390,7 @@ class AudioSynchronizer:
         estimated_duration_ms = int((word_count / 150) * 60 * 1000)
 
         # Start both tasks in parallel
-        audio_task = asyncio.create_task(
-            self.voice_engine.narrate_and_wait(narration)
-        )
+        audio_task = asyncio.create_task(self.voice_engine.narrate_and_wait(narration))
 
         # Smart delay: give audio time to start, but scale with narration length
         # Shorter narration = shorter delay, longer narration = longer delay (max 2s)
@@ -397,7 +403,7 @@ class AudioSynchronizer:
             self._execute_browser_actions(
                 browser_actions,
                 browser_controller,
-                audio_duration_ms=estimated_duration_ms
+                audio_duration_ms=estimated_duration_ms,
             )
         )
 
@@ -405,7 +411,7 @@ class AudioSynchronizer:
         audio_result, _ = await asyncio.gather(audio_task, action_task)
 
         # Log actual vs estimated duration for tuning
-        actual_duration_ms = audio_result.get('duration_ms', 0)
+        actual_duration_ms = audio_result.get("duration_ms", 0)
         if actual_duration_ms > 0:
             diff_ms = abs(actual_duration_ms - estimated_duration_ms)
             logger.debug(
@@ -416,10 +422,7 @@ class AudioSynchronizer:
         return audio_result
 
     async def _execute_browser_actions(
-        self,
-        actions: list,
-        browser_controller,
-        audio_duration_ms: int = 0
+        self, actions: list, browser_controller, audio_duration_ms: int = 0
     ) -> None:
         """
         Execute list of browser actions sequentially, paced across audio duration.
@@ -441,47 +444,52 @@ class AudioSynchronizer:
             time_per_action_ms = 500  # Default 500ms if no audio duration
 
         for i, action in enumerate(actions):
-            action_type = action.get('type')
+            action_type = action.get("type")
             logger.debug(f"Action {i+1}/{len(actions)}: {action_type}")
 
             action_start_time = asyncio.get_event_loop().time()
 
             try:
-                if action_type == 'click':
-                    await browser_controller.click(action['selector'])
-                elif action_type == 'type':
-                    await browser_controller.type_text(action['selector'], action['text'])
-                elif action_type == 'navigate':
-                    await browser_controller.navigate(action['url'])
-                elif action_type == 'upload':
-                    await browser_controller.upload_file(action['selector'], action['file_path'])
-                elif action_type == 'wait':
-                    # Wait actions respect their own duration
-                    await asyncio.sleep(action.get('duration', 1))
-                elif action_type == 'highlight':
-                    # Use highlight_element with duration parameter
-                    duration_ms = action.get('duration', 1000)
-                    await browser_controller.highlight_element(
-                        action['selector'],
-                        duration_ms=duration_ms
+                if action_type == "click":
+                    await browser_controller.click(action["selector"])
+                elif action_type == "type":
+                    await browser_controller.type_text(
+                        action["selector"], action["text"]
                     )
-                elif action_type == 'scroll':
+                elif action_type == "navigate":
+                    await browser_controller.navigate(action["url"])
+                elif action_type == "upload":
+                    await browser_controller.upload_file(
+                        action["selector"], action["file_path"]
+                    )
+                elif action_type == "wait":
+                    # Wait actions respect their own duration
+                    await asyncio.sleep(action.get("duration", 1))
+                elif action_type == "highlight":
+                    # Use highlight_element with duration parameter
+                    duration_ms = action.get("duration", 1000)
+                    await browser_controller.highlight_element(
+                        action["selector"], duration_ms=duration_ms
+                    )
+                elif action_type == "scroll":
                     # Handle scroll - can be to selector or direction
-                    if 'selector' in action:
-                        await browser_controller.smooth_scroll_to(action['selector'])
+                    if "selector" in action:
+                        await browser_controller.smooth_scroll_to(action["selector"])
                     else:
-                        direction = action.get('direction', 'down')
-                        pixels = action.get('pixels', 500)
+                        direction = action.get("direction", "down")
+                        pixels = action.get("pixels", 500)
                         await browser_controller.scroll(direction, pixels)
                 else:
                     logger.warning(f"Unknown action type: {action_type}")
 
                 # Calculate remaining time in action budget and sleep to maintain pace
-                action_elapsed_ms = (asyncio.get_event_loop().time() - action_start_time) * 1000
+                action_elapsed_ms = (
+                    asyncio.get_event_loop().time() - action_start_time
+                ) * 1000
 
                 # Use action's custom delay if specified, otherwise use pacing delay
-                if 'delay' in action:
-                    pace_delay_ms = action['delay'] * 1000
+                if "delay" in action:
+                    pace_delay_ms = action["delay"] * 1000
                 else:
                     pace_delay_ms = max(0, time_per_action_ms - action_elapsed_ms)
 
@@ -489,18 +497,23 @@ class AudioSynchronizer:
                     await asyncio.sleep(pace_delay_ms / 1000)
 
             except Exception as e:
-                logger.error(f"Error executing browser action {action_type}: {e}", exc_info=True)
+                logger.error(
+                    f"Error executing browser action {action_type}: {e}", exc_info=True
+                )
                 # Continue with next action instead of failing completely
                 continue
 
 
 # Example usage
 if __name__ == "__main__":
+
     async def test_voice():
         engine = VoiceEngine()
 
         # Test TTS
-        text = "Hello! I'm Demo Copilot, your AI sales engineer. Let me show you InSign."
+        text = (
+            "Hello! I'm Demo Copilot, your AI sales engineer. Let me show you InSign."
+        )
         audio = await engine.text_to_speech(text, save_path="./test_audio.mp3")
         print(f"Generated audio: {len(audio)} bytes")
 

@@ -10,9 +10,9 @@ class InSignDemoScript:
 
     def __init__(
         self,
-        demo_url: str = "https://demo.insign.io",
-        demo_email: str = "demo@numberlabs.ai",
-        demo_password: str = "DemoPass123!"
+        demo_url: str = "https://insign-pi.vercel.app",
+        demo_email: str = "jbandu@gmail.com",
+        demo_password: str = "Memphis123",
     ):
         self.demo_url = demo_url
         self.demo_email = demo_email
@@ -21,7 +21,9 @@ class InSignDemoScript:
         # Sample documents for demo
         self.sample_docs = {
             "nda": Path("./demo-environments/insign/test-data/NDA_Template.pdf"),
-            "employment": Path("./demo-environments/insign/test-data/Employment_Agreement.pdf"),
+            "employment": Path(
+                "./demo-environments/insign/test-data/Employment_Agreement.pdf"
+            ),
         }
 
     def get_full_demo(self) -> List[Dict[str, Any]]:
@@ -66,10 +68,8 @@ class InSignDemoScript:
 
                 Ready to begin? Great! Let me show you how InSign works.
             """,
-            "browser_actions": [
-                {"type": "wait", "duration": 2}
-            ],
-            "visual_highlights": []
+            "browser_actions": [{"type": "wait", "duration": 2}],
+            "visual_highlights": [],
         }
 
     def _step_2_login(self) -> Dict[str, Any]:
@@ -95,11 +95,15 @@ class InSignDemoScript:
                 {"type": "click", "selector": "#password"},
                 {"type": "type", "selector": "#password", "text": self.demo_password},
                 {"type": "wait", "duration": 0.5},
-                {"type": "highlight", "selector": "button[type='submit']", "duration": 1000},
+                {
+                    "type": "highlight",
+                    "selector": "button[type='submit']",
+                    "duration": 1000,
+                },
                 {"type": "click", "selector": "button[type='submit']"},
-                {"type": "wait", "duration": 2}
+                {"type": "wait", "duration": 2},
             ],
-            "visual_highlights": ["#email", "#password", "button[type='submit']"]
+            "visual_highlights": ["#email", "#password", "button[type='submit']"],
         }
 
     def _step_3_dashboard(self) -> Dict[str, Any]:
@@ -122,14 +126,26 @@ class InSignDemoScript:
             """,
             "browser_actions": [
                 {"type": "wait", "duration": 1},
-                {"type": "highlight", "selector": ".pending-your-signature", "duration": 2000},
+                {
+                    "type": "highlight",
+                    "selector": ".pending-your-signature",
+                    "duration": 2000,
+                },
                 {"type": "wait", "duration": 1},
-                {"type": "highlight", "selector": ".pending-others-signature", "duration": 2000},
+                {
+                    "type": "highlight",
+                    "selector": ".pending-others-signature",
+                    "duration": 2000,
+                },
                 {"type": "wait", "duration": 1},
-                {"type": "highlight", "selector": ".recently-completed", "duration": 2000},
-                {"type": "wait", "duration": 1}
+                {
+                    "type": "highlight",
+                    "selector": ".recently-completed",
+                    "duration": 2000,
+                },
+                {"type": "wait", "duration": 1},
             ],
-            "visual_highlights": [".dashboard-section"]
+            "visual_highlights": [".dashboard-section"],
         }
 
     def _step_4_view_pending_document(self) -> Dict[str, Any]:
@@ -148,9 +164,9 @@ class InSignDemoScript:
             "browser_actions": [
                 {"type": "click", "selector": ".document-item:first-child"},
                 {"type": "wait", "duration": 2},
-                {"type": "highlight", "selector": ".signature-field", "duration": 2000}
+                {"type": "highlight", "selector": ".signature-field", "duration": 2000},
             ],
-            "visual_highlights": [".signature-field"]
+            "visual_highlights": [".signature-field"],
         }
 
     def _step_5_sign_document(self) -> Dict[str, Any]:
@@ -182,9 +198,13 @@ class InSignDemoScript:
                 {"type": "wait", "duration": 2},  # Drawing animation
                 {"type": "click", "selector": ".apply-signature-button"},
                 {"type": "wait", "duration": 1},
-                {"type": "highlight", "selector": ".completion-message", "duration": 2000}
+                {
+                    "type": "highlight",
+                    "selector": ".completion-message",
+                    "duration": 2000,
+                },
             ],
-            "visual_highlights": [".signature-modal", ".completion-badge"]
+            "visual_highlights": [".signature-modal", ".completion-badge"],
         }
 
     def _step_6_upload_new_document(self) -> Dict[str, Any]:
@@ -207,12 +227,19 @@ class InSignDemoScript:
             "browser_actions": [
                 {"type": "click", "selector": "a[href='/upload']"},
                 {"type": "wait", "duration": 1},
-                {"type": "upload", "selector": "input[type='file']",
-                 "file_path": "./demo-environments/insign/test-data/NDA_Template.pdf"},
+                {
+                    "type": "upload",
+                    "selector": "input[type='file']",
+                    "file_path": "./demo-environments/insign/test-data/NDA_Template.pdf",
+                },
                 {"type": "wait", "duration": 2},
-                {"type": "highlight", "selector": ".document-preview", "duration": 2000}
+                {
+                    "type": "highlight",
+                    "selector": ".document-preview",
+                    "duration": 2000,
+                },
             ],
-            "visual_highlights": [".upload-area", ".document-preview"]
+            "visual_highlights": [".upload-area", ".document-preview"],
         }
 
     def _step_7_add_signature_fields(self) -> Dict[str, Any]:
@@ -235,14 +262,18 @@ class InSignDemoScript:
                 {"type": "click", "selector": ".add-signature-field-button"},
                 {"type": "wait", "duration": 1},
                 # Simulate drag-and-drop
-                {"type": "highlight", "selector": ".document-preview", "duration": 1000},
+                {
+                    "type": "highlight",
+                    "selector": ".document-preview",
+                    "duration": 1000,
+                },
                 {"type": "wait", "duration": 2},  # Dragging animation
                 {"type": "scroll", "selector": ".page-2"},
                 {"type": "wait", "duration": 1},
                 {"type": "click", "selector": ".add-signature-field-button"},
-                {"type": "wait", "duration": 2}
+                {"type": "wait", "duration": 2},
             ],
-            "visual_highlights": [".signature-field-placed"]
+            "visual_highlights": [".signature-field-placed"],
         }
 
     def _step_8_add_signers(self) -> Dict[str, Any]:
@@ -270,22 +301,42 @@ class InSignDemoScript:
             "browser_actions": [
                 {"type": "click", "selector": ".add-signer-button"},
                 {"type": "wait", "duration": 0.5},
-                {"type": "type", "selector": "input[name='signer-email-1']",
-                 "text": "legal@company.com"},
-                {"type": "type", "selector": "input[name='signer-name-1']",
-                 "text": "Legal Team"},
+                {
+                    "type": "type",
+                    "selector": "input[name='signer-email-1']",
+                    "text": "legal@company.com",
+                },
+                {
+                    "type": "type",
+                    "selector": "input[name='signer-name-1']",
+                    "text": "Legal Team",
+                },
                 {"type": "wait", "duration": 1},
                 {"type": "click", "selector": ".add-signer-button"},
                 {"type": "wait", "duration": 0.5},
-                {"type": "type", "selector": "input[name='signer-email-2']",
-                 "text": "vendor@suppliercompany.com"},
-                {"type": "type", "selector": "input[name='signer-name-2']",
-                 "text": "Vendor Contact"},
+                {
+                    "type": "type",
+                    "selector": "input[name='signer-email-2']",
+                    "text": "vendor@suppliercompany.com",
+                },
+                {
+                    "type": "type",
+                    "selector": "input[name='signer-name-2']",
+                    "text": "Vendor Contact",
+                },
                 {"type": "wait", "duration": 1},
-                {"type": "highlight", "selector": ".signing-order-options", "duration": 2000},
-                {"type": "highlight", "selector": ".advanced-options", "duration": 2000}
+                {
+                    "type": "highlight",
+                    "selector": ".signing-order-options",
+                    "duration": 2000,
+                },
+                {
+                    "type": "highlight",
+                    "selector": ".advanced-options",
+                    "duration": 2000,
+                },
             ],
-            "visual_highlights": [".signer-list", ".signing-order"]
+            "visual_highlights": [".signer-list", ".signing-order"],
         }
 
     def _step_9_send_document(self) -> Dict[str, Any]:
@@ -306,9 +357,9 @@ class InSignDemoScript:
                 {"type": "highlight", "selector": ".send-button", "duration": 1000},
                 {"type": "click", "selector": ".send-button"},
                 {"type": "wait", "duration": 2},
-                {"type": "highlight", "selector": ".success-message", "duration": 2000}
+                {"type": "highlight", "selector": ".success-message", "duration": 2000},
             ],
-            "visual_highlights": [".success-message"]
+            "visual_highlights": [".success-message"],
         }
 
     def _step_10_audit_trail(self) -> Dict[str, Any]:
@@ -337,12 +388,28 @@ class InSignDemoScript:
                 {"type": "click", "selector": ".view-audit-trail-link"},
                 {"type": "wait", "duration": 2},
                 {"type": "scroll", "selector": ".audit-event:first-child"},
-                {"type": "highlight", "selector": ".audit-event:nth-child(1)", "duration": 1500},
-                {"type": "highlight", "selector": ".audit-event:nth-child(2)", "duration": 1500},
-                {"type": "highlight", "selector": ".audit-event:nth-child(3)", "duration": 1500},
-                {"type": "highlight", "selector": ".timestamp-and-ip", "duration": 2000}
+                {
+                    "type": "highlight",
+                    "selector": ".audit-event:nth-child(1)",
+                    "duration": 1500,
+                },
+                {
+                    "type": "highlight",
+                    "selector": ".audit-event:nth-child(2)",
+                    "duration": 1500,
+                },
+                {
+                    "type": "highlight",
+                    "selector": ".audit-event:nth-child(3)",
+                    "duration": 1500,
+                },
+                {
+                    "type": "highlight",
+                    "selector": ".timestamp-and-ip",
+                    "duration": 2000,
+                },
             ],
-            "visual_highlights": [".audit-trail-panel"]
+            "visual_highlights": [".audit-trail-panel"],
         }
 
     def _step_11_pricing_comparison(self) -> Dict[str, Any]:
@@ -369,10 +436,14 @@ class InSignDemoScript:
             "browser_actions": [
                 {"type": "navigate", "url": f"{self.demo_url}/pricing"},
                 {"type": "wait", "duration": 2},
-                {"type": "highlight", "selector": ".pricing-comparison-table", "duration": 3000},
-                {"type": "scroll", "selector": ".feature-comparison"}
+                {
+                    "type": "highlight",
+                    "selector": ".pricing-comparison-table",
+                    "duration": 3000,
+                },
+                {"type": "scroll", "selector": ".feature-comparison"},
             ],
-            "visual_highlights": [".cost-savings-highlight"]
+            "visual_highlights": [".cost-savings-highlight"],
         }
 
     def _step_12_closing(self) -> Dict[str, Any]:
@@ -396,9 +467,9 @@ class InSignDemoScript:
             """,
             "browser_actions": [
                 {"type": "navigate", "url": f"{self.demo_url}/dashboard"},
-                {"type": "wait", "duration": 2}
+                {"type": "wait", "duration": 2},
             ],
-            "visual_highlights": []
+            "visual_highlights": [],
         }
 
     def get_custom_demo(self, features: List[str]) -> List[Dict[str, Any]]:
@@ -416,11 +487,18 @@ class InSignDemoScript:
         ]
 
         feature_steps = {
-            'signing': [self._step_4_view_pending_document(), self._step_5_sign_document()],
-            'sending': [self._step_6_upload_new_document(), self._step_7_add_signature_fields(),
-                       self._step_8_add_signers(), self._step_9_send_document()],
-            'audit': [self._step_10_audit_trail()],
-            'pricing': [self._step_11_pricing_comparison()],
+            "signing": [
+                self._step_4_view_pending_document(),
+                self._step_5_sign_document(),
+            ],
+            "sending": [
+                self._step_6_upload_new_document(),
+                self._step_7_add_signature_fields(),
+                self._step_8_add_signers(),
+                self._step_9_send_document(),
+            ],
+            "audit": [self._step_10_audit_trail()],
+            "pricing": [self._step_11_pricing_comparison()],
         }
 
         custom_steps = base_steps.copy()
@@ -440,7 +518,9 @@ if __name__ == "__main__":
     # Get full demo
     full_demo = script.get_full_demo()
     print(f"Full demo has {len(full_demo)} steps")
-    print(f"Estimated duration: {sum(s['duration_estimate_seconds'] for s in full_demo)} seconds")
+    print(
+        f"Estimated duration: {sum(s['duration_estimate_seconds'] for s in full_demo)} seconds"
+    )
 
     # Print first step
     print("\nStep 1:")

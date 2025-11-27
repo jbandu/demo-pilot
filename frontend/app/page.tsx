@@ -129,13 +129,13 @@ export default function HomePage() {
           <CardHeader>
             <CardTitle>Get Your AI-Powered Demo</CardTitle>
             <CardDescription>
-              Fill in your details and Demo Copilot will give you a personalized walkthrough
+              Start your demo instantly. Details are optional for personalization.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="name">Your Name</Label>
+                <Label htmlFor="name">Your Name <span className="text-gray-400">(optional)</span></Label>
                 <Input
                   id="name"
                   placeholder="Jayaprakash"
@@ -144,7 +144,7 @@ export default function HomePage() {
                 />
               </div>
               <div>
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email <span className="text-gray-400">(optional)</span></Label>
                 <Input
                   id="email"
                   type="email"
@@ -156,7 +156,7 @@ export default function HomePage() {
             </div>
 
             <div>
-              <Label htmlFor="company">Company</Label>
+              <Label htmlFor="company">Company <span className="text-gray-400">(optional)</span></Label>
               <Input
                 id="company"
                 placeholder="Number Labs"
@@ -199,7 +199,7 @@ export default function HomePage() {
               className="w-full"
               size="lg"
               onClick={handleStartDemo}
-              disabled={loading || !formData.customer_email}
+              disabled={loading}
             >
               {loading ? (
                 <>Loading...</>

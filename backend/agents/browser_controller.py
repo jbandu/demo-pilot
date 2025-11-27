@@ -2,6 +2,7 @@
 Browser Controller - Playwright wrapper for demo automation with human-like behavior
 Handles browser navigation, screenshots, and interaction recording
 """
+
 import asyncio
 import base64
 import random
@@ -26,7 +27,7 @@ class BrowserController:
         viewport_height: int = 1080,
         record_video: bool = True,
         video_dir: str = "./recordings",
-        slow_mo: int = 100  # Milliseconds to slow down operations
+        slow_mo: int = 100,  # Milliseconds to slow down operations
     ):
         self.headless = headless
         self.viewport_width = viewport_width
@@ -59,12 +60,12 @@ class BrowserController:
             headless=self.headless,
             slow_mo=self.slow_mo,  # Slow down operations for visibility
             args=[
-                '--start-maximized',
-                '--disable-blink-features=AutomationControlled',  # Hide automation
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-web-security',  # For demo purposes
-            ]
+                "--start-maximized",
+                "--disable-blink-features=AutomationControlled",  # Hide automation
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-web-security",  # For demo purposes
+            ],
         )
 
         # Create context with video recording and realistic settings
@@ -73,7 +74,10 @@ class BrowserController:
             "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "locale": "en-US",
             "timezone_id": "America/Los_Angeles",
-            "geolocation": {"longitude": -122.4194, "latitude": 37.7749},  # San Francisco
+            "geolocation": {
+                "longitude": -122.4194,
+                "latitude": 37.7749,
+            },  # San Francisco
             "permissions": ["geolocation"],
             "color_scheme": "light",
             "has_touch": False,
@@ -86,7 +90,7 @@ class BrowserController:
             context_options["record_video_dir"] = self.video_dir
             context_options["record_video_size"] = {
                 "width": self.viewport_width,
-                "height": self.viewport_height
+                "height": self.viewport_height,
             }
 
         self.context = await self.browser.new_context(**context_options)
@@ -102,25 +106,31 @@ class BrowserController:
     async def _inject_human_behavior(self):
         """Inject scripts to make browser appear more human-like"""
         # Hide webdriver property
-        await self.page.add_init_script("""
+        await self.page.add_init_script(
+            """
             Object.defineProperty(navigator, 'webdriver', {
                 get: () => undefined
             });
-        """)
+        """
+        )
 
         # Override plugins to appear more realistic
-        await self.page.add_init_script("""
+        await self.page.add_init_script(
+            """
             Object.defineProperty(navigator, 'plugins', {
                 get: () => [1, 2, 3, 4, 5]
             });
-        """)
+        """
+        )
 
         # Override languages
-        await self.page.add_init_script("""
+        await self.page.add_init_script(
+            """
             Object.defineProperty(navigator, 'languages', {
                 get: () => ['en-US', 'en']
             });
-        """)
+        """
+        )
 
         logger.debug("Human behavior scripts injected")
 
@@ -159,7 +169,8 @@ class BrowserController:
             await self.page.goto(url, wait_until=wait_until, timeout=30000)
             await asyncio.sleep(self._random_delay(0.5, 1.5))  # Natural pause
             await self._log_action("navigate", {"url": url})
-            await self._capture_screenshot(f"navigate_{datetime.now().timestamp()}")
+            # Commented out to reduce flickering - screenshots sent via WebSocket only
+            # await self._capture_screenshot(f"navigate_{datetime.now().timestamp()}")
         except Exception as e:
             logger.error(f"Navigation failed: {e}")
             raise
@@ -186,20 +197,22 @@ class BrowserController:
                 box = await element.bounding_box()
                 if box:
                     # Add random offset to click point (more human-like)
-                    x = box['x'] + box['width'] / 2 + random.randint(-5, 5)
-                    y = box['y'] + box['height'] / 2 + random.randint(-5, 5)
+                    x = box["x"] + box["width"] / 2 + random.randint(-5, 5)
+                    y = box["y"] + box["height"] / 2 + random.randint(-5, 5)
                     await self.page.mouse.move(x, y, steps=random.randint(5, 15))
                     await asyncio.sleep(self._random_delay(0.1, 0.3))
 
             # Click with random delay and increased timeout
-            await self.page.click(selector, delay=random.randint(50, 150), timeout=60000)
+            await self.page.click(
+                selector, delay=random.randint(50, 150), timeout=60000
+            )
             await asyncio.sleep(self._random_delay(0.3, 0.8))
 
-            await self._log_action("click", {
-                "selector": selector,
-                "description": description
-            })
-            await self._capture_screenshot(f"click_{datetime.now().timestamp()}")
+            await self._log_action(
+                "click", {"selector": selector, "description": description}
+            )
+            # Commented out to reduce flickering
+            # await self._capture_screenshot(f"click_{datetime.now().timestamp()}")
 
         except Exception as e:
             logger.error(f"Click failed on {selector}: {e}")
@@ -215,7 +228,7 @@ class BrowserController:
             await asyncio.sleep(self._random_delay(0.2, 0.4))
 
             # Clear existing content
-            await self.page.fill(selector, '')
+            await self.page.fill(selector, "")
             await asyncio.sleep(self._random_delay(0.1, 0.2))
 
             # Type with variable delay (humans don't type at constant speed)
@@ -229,11 +242,9 @@ class BrowserController:
 
             await asyncio.sleep(self._random_delay(0.3, 0.6))
 
-            await self._log_action("type", {
-                "selector": selector,
-                "text": text
-            })
-            await self._capture_screenshot(f"type_{datetime.now().timestamp()}")
+            await self._log_action("type", {"selector": selector, "text": text})
+            # Commented out to reduce flickering
+            # await self._capture_screenshot(f"type_{datetime.now().timestamp()}")
 
         except Exception as e:
             logger.error(f"Type failed on {selector}: {e}")
@@ -251,11 +262,11 @@ class BrowserController:
             await self.page.set_input_files(selector, file_path)
             await asyncio.sleep(self._random_delay(0.5, 1.0))
 
-            await self._log_action("upload", {
-                "selector": selector,
-                "file_path": file_path
-            })
-            await self._capture_screenshot(f"upload_{datetime.now().timestamp()}")
+            await self._log_action(
+                "upload", {"selector": selector, "file_path": file_path}
+            )
+            # Commented out to reduce flickering
+            # await self._capture_screenshot(f"upload_{datetime.now().timestamp()}")
 
         except Exception as e:
             logger.error(f"Upload failed: {e}")
@@ -279,21 +290,25 @@ class BrowserController:
 
         try:
             if direction == "down":
-                await self.page.evaluate(f"""
+                await self.page.evaluate(
+                    f"""
                     window.scrollBy({{
                         top: {pixels},
                         left: 0,
                         behavior: 'smooth'
                     }});
-                """)
+                """
+                )
             elif direction == "up":
-                await self.page.evaluate(f"""
+                await self.page.evaluate(
+                    f"""
                     window.scrollBy({{
                         top: -{pixels},
                         left: 0,
                         behavior: 'smooth'
                     }});
-                """)
+                """
+                )
 
             await asyncio.sleep(self._random_delay(0.8, 1.5))
             await self._log_action("scroll", {"direction": direction, "pixels": pixels})
@@ -307,7 +322,9 @@ class BrowserController:
         logger.info(f"Waiting for: {selector}")
 
         try:
-            await self.page.wait_for_selector(selector, timeout=timeout, state="visible")
+            await self.page.wait_for_selector(
+                selector, timeout=timeout, state="visible"
+            )
         except Exception as e:
             logger.error(f"Wait for selector failed: {selector}")
             raise
@@ -357,7 +374,7 @@ class BrowserController:
         try:
             screenshot = await self.screenshot()
             if screenshot:
-                return base64.b64encode(screenshot).decode('utf-8')
+                return base64.b64encode(screenshot).decode("utf-8")
             return None
         except Exception as e:
             logger.error(f"Error capturing video frame: {e}")
@@ -369,11 +386,13 @@ class BrowserController:
             screenshot_bytes = await self.screenshot()
             screenshot_b64 = base64.b64encode(screenshot_bytes).decode()
 
-            self.screenshots.append({
-                "name": name,
-                "timestamp": datetime.now().isoformat(),
-                "data": screenshot_b64
-            })
+            self.screenshots.append(
+                {
+                    "name": name,
+                    "timestamp": datetime.now().isoformat(),
+                    "data": screenshot_b64,
+                }
+            )
 
             if self.on_screenshot:
                 await self.on_screenshot(screenshot_b64)
@@ -386,7 +405,7 @@ class BrowserController:
         action = {
             "type": action_type,
             "timestamp": datetime.now().isoformat(),
-            "details": details
+            "details": details,
         }
 
         self.actions_log.append(action)
@@ -422,10 +441,13 @@ class BrowserController:
         """Clear actions log"""
         self.actions_log = []
 
-    async def highlight_element(self, selector: str, duration_ms: int = 1000, color: str = "#4CAF50"):
+    async def highlight_element(
+        self, selector: str, duration_ms: int = 1000, color: str = "#4CAF50"
+    ):
         """Visually highlight element with colored outline"""
         try:
-            await self.page.evaluate(f"""
+            await self.page.evaluate(
+                f"""
                 (selector, duration, color) => {{
                     const element = document.querySelector(selector);
                     if (element) {{
@@ -439,14 +461,19 @@ class BrowserController:
                         }}, duration);
                     }}
                 }}
-            """, selector, duration_ms, color)
+            """,
+                selector,
+                duration_ms,
+                color,
+            )
         except Exception as e:
             logger.warning(f"Highlight failed: {e}")
 
     async def smooth_scroll_to(self, selector: str):
         """Smooth scroll to element"""
         try:
-            await self.page.evaluate(f"""
+            await self.page.evaluate(
+                f"""
                 (selector) => {{
                     const element = document.querySelector(selector);
                     if (element) {{
@@ -457,7 +484,9 @@ class BrowserController:
                         }});
                     }}
                 }}
-            """, selector)
+            """,
+                selector,
+            )
             await asyncio.sleep(self._random_delay(0.8, 1.2))
         except Exception as e:
             logger.warning(f"Smooth scroll failed: {e}")
@@ -500,12 +529,16 @@ class BrowserController:
         try:
             await self.page.set_checked(selector, checked)
             await asyncio.sleep(self._random_delay(0.2, 0.4))
-            await self._log_action("checkbox", {"selector": selector, "checked": checked})
+            await self._log_action(
+                "checkbox", {"selector": selector, "checked": checked}
+            )
         except Exception as e:
             logger.error(f"Checkbox operation failed: {e}")
             raise
 
-    async def get_element_attribute(self, selector: str, attribute: str) -> Optional[str]:
+    async def get_element_attribute(
+        self, selector: str, attribute: str
+    ) -> Optional[str]:
         """Get attribute value of element"""
         try:
             element = await self.page.query_selector(selector)

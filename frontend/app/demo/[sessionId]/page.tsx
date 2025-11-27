@@ -82,8 +82,8 @@ export default function DemoPage() {
     // Initial status fetch
     fetchStatus();
 
-    // Poll for status updates
-    const interval = setInterval(fetchStatus, 2000);
+    // Poll for status updates (reduced from 2000ms to reduce flickering)
+    const interval = setInterval(fetchStatus, 5000);
 
     return () => {
       ws.close();

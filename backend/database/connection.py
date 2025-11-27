@@ -2,6 +2,7 @@
 Database connection management for Demo Copilot
 Handles PostgreSQL connections via SQLAlchemy
 """
+
 import os
 from typing import Generator
 from sqlalchemy import create_engine
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 # Database URL from environment
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://neondb_owner:npg_U3cV2pwZqOGA@ep-bitter-math-ahpxc9am-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require"
+    "postgresql://neondb_owner:npg_U3cV2pwZqOGA@ep-bitter-math-ahpxc9am-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require",
 )
 
 # Create engine
@@ -26,18 +27,11 @@ engine = create_engine(
     poolclass=NullPool,  # Recommended for serverless
     echo=False,  # Set to True for SQL query logging
     future=True,
-    connect_args={
-        "connect_timeout": 10,
-        "application_name": "demo_copilot"
-    }
+    connect_args={"connect_timeout": 10, "application_name": "demo_copilot"},
 )
 
 # Create session factory
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def init_db():

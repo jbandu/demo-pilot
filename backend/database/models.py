@@ -2,11 +2,22 @@
 Database models for Demo Copilot
 Tracks demo sessions, interactions, actions, and analytics
 """
+
 from datetime import datetime
 from typing import Optional, Dict, Any
 from enum import Enum
 import uuid
-from sqlalchemy import Column, String, Integer, DateTime, JSON, Float, ForeignKey, Text, Boolean
+from sqlalchemy import (
+    Column,
+    String,
+    Integer,
+    DateTime,
+    JSON,
+    Float,
+    ForeignKey,
+    Text,
+    Boolean,
+)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from pydantic import BaseModel
@@ -16,6 +27,7 @@ Base = declarative_base()
 
 class DemoStatus(str, Enum):
     """Status of a demo session"""
+
     INITIALIZED = "initialized"
     RUNNING = "running"
     PAUSED = "paused"
@@ -26,6 +38,7 @@ class DemoStatus(str, Enum):
 
 class ActionType(str, Enum):
     """Type of action during demo"""
+
     CLICK = "click"
     TYPE = "type"
     UPLOAD = "upload"
@@ -38,6 +51,7 @@ class ActionType(str, Enum):
 
 class QuestionIntent(str, Enum):
     """Intent classification for customer questions"""
+
     CLARIFICATION = "clarification"
     FEATURE_REQUEST = "feature_request"
     PRICING = "pricing"
@@ -49,6 +63,7 @@ class QuestionIntent(str, Enum):
 
 class Sentiment(str, Enum):
     """Sentiment classification"""
+
     POSITIVE = "positive"
     NEUTRAL = "neutral"
     NEGATIVE = "negative"
@@ -57,8 +72,10 @@ class Sentiment(str, Enum):
 
 # SQLAlchemy Models
 
+
 class DemoSession(Base):
     """Tracks individual demo sessions"""
+
     __tablename__ = "demo_sessions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -71,7 +88,9 @@ class DemoSession(Base):
 
     # Demo config
     demo_type = Column(String, nullable=False)  # 'insign', 'crew_intelligence', etc.
-    demo_duration_preference = Column(String, default='standard')  # 'quick', 'standard', 'deep_dive'
+    demo_duration_preference = Column(
+        String, default="standard"
+    )  # 'quick', 'standard', 'deep_dive'
     demo_customization = Column(JSON, nullable=True)  # Custom preferences
 
     # Voice settings
@@ -103,16 +122,23 @@ class DemoSession(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    actions = relationship("DemoAction", back_populates="session", cascade="all, delete-orphan")
-    questions = relationship("CustomerQuestion", back_populates="session", cascade="all, delete-orphan")
+    actions = relationship(
+        "DemoAction", back_populates="session", cascade="all, delete-orphan"
+    )
+    questions = relationship(
+        "CustomerQuestion", back_populates="session", cascade="all, delete-orphan"
+    )
 
 
 class DemoAction(Base):
     """Tracks every action taken during demo"""
+
     __tablename__ = "demo_actions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    session_id = Column(String, ForeignKey('demo_sessions.id', ondelete='CASCADE'), nullable=False)
+    session_id = Column(
+        String, ForeignKey("demo_sessions.id", ondelete="CASCADE"), nullable=False
+    )
 
     # Action details
     step_number = Column(Integer, nullable=False)
@@ -134,7 +160,9 @@ class DemoAction(Base):
     duration_ms = Column(Integer, nullable=True)
 
     # Status
-    status = Column(String, default='pending')  # 'pending', 'running', 'completed', 'failed'
+    status = Column(
+        String, default="pending"
+    )  # 'pending', 'running', 'completed', 'failed'
     error_message = Column(Text, nullable=True)
 
     # Relationships
@@ -143,10 +171,13 @@ class DemoAction(Base):
 
 class CustomerQuestion(Base):
     """Tracks customer questions during demo"""
+
     __tablename__ = "customer_questions"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    session_id = Column(String, ForeignKey('demo_sessions.id', ondelete='CASCADE'), nullable=False)
+    session_id = Column(
+        String, ForeignKey("demo_sessions.id", ondelete="CASCADE"), nullable=False
+    )
 
     # Question
     question_text = Column(Text, nullable=False)
@@ -156,12 +187,14 @@ class CustomerQuestion(Base):
     # Agent response
     response_text = Column(Text, nullable=True)
     response_audio_url = Column(String, nullable=True)
-    response_action = Column(String, nullable=True)  # 'continue', 'jump_to_feature', 'deep_dive'
+    response_action = Column(
+        String, nullable=True
+    )  # 'continue', 'jump_to_feature', 'deep_dive'
 
     # Classification
     intent = Column(String, nullable=True)  # QuestionIntent enum
     sentiment = Column(String, nullable=True)  # Sentiment enum
-    priority = Column(String, default='normal')  # 'low', 'normal', 'high', 'critical'
+    priority = Column(String, default="normal")  # 'low', 'normal', 'high', 'critical'
 
     # Timing
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -173,14 +206,15 @@ class CustomerQuestion(Base):
 
 class DemoScript(Base):
     """Stores demo scripts for different products"""
+
     __tablename__ = "demo_scripts"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
 
     # Script identity
     product_name = Column(String, nullable=False)  # 'insign', 'crew_intelligence'
-    script_version = Column(String, default='1.0')
-    script_type = Column(String, default='standard')  # 'quick', 'standard', 'deep_dive'
+    script_version = Column(String, default="1.0")
+    script_type = Column(String, default="standard")  # 'quick', 'standard', 'deep_dive'
 
     # Script content
     steps = Column(JSON, nullable=False)  # List of demo steps
@@ -200,6 +234,7 @@ class DemoScript(Base):
 
 class DemoAnalytics(Base):
     """Aggregate analytics for demo performance"""
+
     __tablename__ = "demo_analytics"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -230,8 +265,10 @@ class DemoAnalytics(Base):
 
 # Pydantic Schemas for API
 
+
 class DemoSessionCreate(BaseModel):
     """Schema for creating a new demo session"""
+
     demo_type: str
     customer_email: Optional[str] = None
     customer_name: Optional[str] = None
@@ -245,6 +282,7 @@ class DemoSessionCreate(BaseModel):
 
 class DemoSessionResponse(BaseModel):
     """Schema for demo session response"""
+
     id: str
     demo_type: str
     status: str
@@ -261,6 +299,7 @@ class DemoSessionResponse(BaseModel):
 
 class DemoActionCreate(BaseModel):
     """Schema for creating a demo action"""
+
     step_number: int
     action_type: str
     action_description: str
@@ -271,6 +310,7 @@ class DemoActionCreate(BaseModel):
 
 class DemoActionResponse(BaseModel):
     """Schema for demo action response"""
+
     id: str
     session_id: str
     step_number: int
@@ -285,12 +325,14 @@ class DemoActionResponse(BaseModel):
 
 class CustomerQuestionCreate(BaseModel):
     """Schema for creating a customer question"""
+
     question_text: str
     asked_at_step: int
 
 
 class CustomerQuestionResponse(BaseModel):
     """Schema for customer question response"""
+
     id: str
     session_id: str
     question_text: str
@@ -306,6 +348,7 @@ class CustomerQuestionResponse(BaseModel):
 
 class DemoScriptCreate(BaseModel):
     """Schema for creating a demo script"""
+
     product_name: str
     script_version: str = "1.0"
     script_type: str = "standard"
@@ -318,6 +361,7 @@ class DemoScriptCreate(BaseModel):
 
 class DemoScriptResponse(BaseModel):
     """Schema for demo script response"""
+
     id: str
     product_name: str
     script_version: str
@@ -331,6 +375,7 @@ class DemoScriptResponse(BaseModel):
 
 class DemoAnalyticsResponse(BaseModel):
     """Schema for analytics response"""
+
     date: datetime
     product_name: Optional[str]
     total_demos_started: int
@@ -346,6 +391,7 @@ class DemoAnalyticsResponse(BaseModel):
 
 class DemoMetrics(BaseModel):
     """Real-time demo metrics"""
+
     session_id: str
     current_step: int
     progress_percentage: float

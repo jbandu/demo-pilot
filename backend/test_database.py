@@ -58,7 +58,8 @@ if DATABASE_URL.startswith("postgresql://") and "+asyncpg" not in DATABASE_URL:
     # Remove channel_binding if present
     if "channel_binding" in suggested_url:
         import re
-        suggested_url = re.sub(r'[&?]channel_binding=[^&]*', '', suggested_url)
+
+        suggested_url = re.sub(r"[&?]channel_binding=[^&]*", "", suggested_url)
     print(f"   {suggested_url}")
     print()
 
@@ -95,7 +96,9 @@ try:
             print(f"❌ Database connection failed: {e}")
             print()
             print("Common issues:")
-            print("  1. Wrong protocol - use 'postgresql+asyncpg://' not 'postgresql://'")
+            print(
+                "  1. Wrong protocol - use 'postgresql+asyncpg://' not 'postgresql://'"
+            )
             print("  2. Remove 'channel_binding' parameter if present")
             print("  3. Check if your database is accessible from your network")
             print("  4. Verify credentials are correct")
@@ -131,5 +134,6 @@ except ImportError as e:
 except Exception as e:
     print(f"❌ Unexpected error: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)

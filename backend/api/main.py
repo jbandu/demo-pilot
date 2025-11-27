@@ -1,5 +1,13 @@
 # Demo Copilot Backend - FastAPI Server
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, UploadFile, File
+from fastapi import (
+    FastAPI,
+    WebSocket,
+    WebSocketDisconnect,
+    HTTPException,
+    Depends,
+    UploadFile,
+    File,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -46,11 +54,11 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Demo Copilot API",
     description="Autonomous product demo agent system",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 # CORS - Allow frontend to connect
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip('/')
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
 allowed_origins = [
     "http://localhost:3000",
     "http://localhost:3001",  # Next.js dev server
@@ -66,6 +74,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # WebSocket URL helper
 def get_ws_url() -> str:
     """Get WebSocket base URL from environment"""
@@ -73,6 +82,7 @@ def get_ws_url() -> str:
     if backend_url:
         return backend_url.replace("https://", "wss://").replace("http://", "ws://")
     return "ws://localhost:8000"
+
 
 # Database
 def fix_database_url(url: str) -> str:
@@ -86,11 +96,16 @@ def fix_database_url(url: str) -> str:
         return url.replace("postgres://", "postgresql+asyncpg://", 1)
     return url
 
-raw_database_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/demo_copilot")
+
+raw_database_url = os.getenv(
+    "DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/demo_copilot"
+)
 DATABASE_URL = fix_database_url(raw_database_url)
 SKIP_DATABASE = os.getenv("SKIP_DATABASE", "false").lower() in ("true", "1", "yes")
 
-logger.info(f"Database URL protocol: {DATABASE_URL.split('://')[0] if '://' in DATABASE_URL else 'unknown'}")
+logger.info(
+    f"Database URL protocol: {DATABASE_URL.split('://')[0] if '://' in DATABASE_URL else 'unknown'}"
+)
 
 # Only create engine if not skipping database
 engine = None
@@ -99,10 +114,14 @@ AsyncSessionLocal = None
 if not SKIP_DATABASE:
     try:
         engine = create_async_engine(DATABASE_URL, echo=True)
-        AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+        AsyncSessionLocal = sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
     except Exception as e:
         logger.warning(f"Could not create database engine: {e}")
-        logger.warning("Database will be disabled. Set SKIP_DATABASE=true to suppress this warning.")
+        logger.warning(
+            "Database will be disabled. Set SKIP_DATABASE=true to suppress this warning."
+        )
 
 # Global state
 active_demos: Dict[str, DemoCopilot] = {}
@@ -111,13 +130,19 @@ websocket_connections: Dict[str, WebSocket] = {}
 
 # Pydantic models
 class StartDemoRequest(BaseModel):
-    demo_type: str = Field(..., description="Type of demo: 'insign', 'crew_intelligence'")
+    demo_type: str = Field(
+        ..., description="Type of demo: 'insign', 'crew_intelligence'"
+    )
     customer_name: Optional[str] = None
     customer_email: Optional[str] = None
     customer_company: Optional[str] = None
     customer_industry: Optional[str] = None
-    demo_duration: str = Field(default='standard', description="'quick', 'standard', or 'deep_dive'")
-    custom_features: Optional[List[str]] = Field(default=None, description="Custom features to focus on")
+    demo_duration: str = Field(
+        default="standard", description="'quick', 'standard', or 'deep_dive'"
+    )
+    custom_features: Optional[List[str]] = Field(
+        default=None, description="Custom features to focus on"
+    )
 
 
 class StartDemoResponse(BaseModel):
@@ -174,7 +199,7 @@ async def root():
         "service": "Demo Copilot",
         "version": "1.0.0",
         "status": "operational",
-        "active_demos": len(active_demos)
+        "active_demos": len(active_demos),
     }
 
 
@@ -184,12 +209,14 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "active_demos": len(active_demos),
-        "websocket_connections": len(websocket_connections)
+        "websocket_connections": len(websocket_connections),
     }
 
 
 @app.post("/api/demo/start", response_model=StartDemoResponse)
-async def start_demo(request: StartDemoRequest, db: Optional[AsyncSession] = Depends(get_db)):
+async def start_demo(
+    request: StartDemoRequest, db: Optional[AsyncSession] = Depends(get_db)
+):
     """Start a new demo session"""
     try:
         logger.info(f"Starting {request.demo_type} demo for {request.customer_email}")
@@ -199,10 +226,10 @@ async def start_demo(request: StartDemoRequest, db: Optional[AsyncSession] = Dep
 
         # Build customer context
         customer_context = {
-            'name': request.customer_name,
-            'email': request.customer_email,
-            'company': request.customer_company,
-            'industry': request.customer_industry
+            "name": request.customer_name,
+            "email": request.customer_email,
+            "company": request.customer_company,
+            "industry": request.customer_industry,
         }
 
         # Get custom script if requested
@@ -216,26 +243,22 @@ async def start_demo(request: StartDemoRequest, db: Optional[AsyncSession] = Dep
         session_id = await copilot.start_demo(
             demo_type=request.demo_type,
             customer_context=customer_context,
-            custom_script=custom_script
+            custom_script=custom_script,
         )
 
         # Store in active demos
         active_demos[session_id] = copilot
 
         # Estimate duration
-        duration_map = {
-            'quick': 5,
-            'standard': 10,
-            'deep_dive': 20
-        }
+        duration_map = {"quick": 5, "standard": 10, "deep_dive": 20}
         estimated_duration = duration_map.get(request.demo_duration, 10)
 
         return StartDemoResponse(
             session_id=session_id,
-            status='started',
+            status="started",
             demo_type=request.demo_type,
             websocket_url=f"{get_ws_url()}/ws/demo/{session_id}",
-            estimated_duration_minutes=estimated_duration
+            estimated_duration_minutes=estimated_duration,
         )
 
     except Exception as e:
@@ -255,17 +278,17 @@ async def get_demo_status(session_id: str):
     if not state:
         raise HTTPException(status_code=500, detail="Demo state not initialized")
 
-    total_steps = len(state['demo_script'])
-    current_step = state['current_step']
+    total_steps = len(state["demo_script"])
+    current_step = state["current_step"]
     progress = (current_step / total_steps * 100) if total_steps > 0 else 0
 
     return DemoStatusResponse(
         session_id=session_id,
-        status=state['status'],
+        status=state["status"],
         current_step=current_step,
         total_steps=total_steps,
         progress_percentage=round(progress, 2),
-        messages=state.get('messages', [])
+        messages=state.get("messages", []),
     )
 
 
@@ -282,7 +305,7 @@ async def ask_question(session_id: str, request: AskQuestionRequest):
         return {
             "status": "question_received",
             "session_id": session_id,
-            "question": request.question
+            "question": request.question,
         }
     except Exception as e:
         logger.error(f"Error processing question: {e}", exc_info=True)
@@ -305,7 +328,9 @@ async def voice_input(session_id: str, audio: UploadFile = File(...)):
         raise HTTPException(status_code=404, detail="Demo session not found")
 
     try:
-        logger.info(f"Voice input received for session {session_id}, file: {audio.filename}")
+        logger.info(
+            f"Voice input received for session {session_id}, file: {audio.filename}"
+        )
 
         # Pause demo while processing voice input
         await copilot.pause_demo()
@@ -314,7 +339,9 @@ async def voice_input(session_id: str, audio: UploadFile = File(...)):
         audio_bytes = await audio.read()
 
         # Transcribe using Whisper
-        transcribed_text = await copilot.voice_engine.speech_to_text(audio_bytes=audio_bytes)
+        transcribed_text = await copilot.voice_engine.speech_to_text(
+            audio_bytes=audio_bytes
+        )
         logger.info(f"Transcribed voice input: {transcribed_text}")
 
         if not transcribed_text or transcribed_text.strip() == "":
@@ -332,7 +359,7 @@ async def voice_input(session_id: str, audio: UploadFile = File(...)):
             "status": "voice_input_processed",
             "session_id": session_id,
             "transcribed_text": transcribed_text,
-            "action": "answered_and_resumed"
+            "action": "answered_and_resumed",
         }
 
     except Exception as e:
@@ -354,21 +381,19 @@ async def control_demo(session_id: str, request: DemoControlRequest):
         raise HTTPException(status_code=404, detail="Demo session not found")
 
     try:
-        if request.action == 'pause':
+        if request.action == "pause":
             await copilot.pause_demo()
-        elif request.action == 'resume':
+        elif request.action == "resume":
             await copilot.resume_demo()
-        elif request.action == 'stop':
+        elif request.action == "stop":
             await copilot.cleanup()
             active_demos.pop(session_id, None)
         else:
-            raise HTTPException(status_code=400, detail=f"Unknown action: {request.action}")
+            raise HTTPException(
+                status_code=400, detail=f"Unknown action: {request.action}"
+            )
 
-        return {
-            "status": "success",
-            "action": request.action,
-            "session_id": session_id
-        }
+        return {"status": "success", "action": request.action, "session_id": session_id}
     except Exception as e:
         logger.error(f"Error controlling demo: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -392,19 +417,20 @@ async def websocket_demo_stream(websocket: WebSocket, session_id: str):
     try:
         copilot = active_demos.get(session_id)
         if not copilot:
-            await websocket.send_json({
-                "type": "error",
-                "message": "Demo session not found"
-            })
+            await websocket.send_json(
+                {"type": "error", "message": "Demo session not found"}
+            )
             await websocket.close()
             return
 
         # Send initial connection confirmation
-        await websocket.send_json({
-            "type": "connected",
-            "session_id": session_id,
-            "timestamp": datetime.utcnow().isoformat()
-        })
+        await websocket.send_json(
+            {
+                "type": "connected",
+                "session_id": session_id,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
 
         # Stream demo updates
         while True:
@@ -419,29 +445,35 @@ async def websocket_demo_stream(websocket: WebSocket, session_id: str):
             # Get current video frame
             video_frame = await copilot.browser.get_video_frame()
             if video_frame:
-                await websocket.send_json({
-                    "type": "video_frame",
-                    "data": video_frame,
-                    "timestamp": datetime.utcnow().isoformat()
-                })
+                await websocket.send_json(
+                    {
+                        "type": "video_frame",
+                        "data": video_frame,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
 
             # Send status update
-            await websocket.send_json({
-                "type": "status_update",
-                "current_step": state['current_step'],
-                "total_steps": len(state['demo_script']),
-                "status": state['status'],
-                "timestamp": datetime.utcnow().isoformat()
-            })
+            await websocket.send_json(
+                {
+                    "type": "status_update",
+                    "current_step": state["current_step"],
+                    "total_steps": len(state["demo_script"]),
+                    "status": state["status"],
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+            )
 
             # Check for new messages
-            if state.get('messages'):
-                last_message = state['messages'][-1]
-                await websocket.send_json({
-                    "type": "message",
-                    "message": last_message,
-                    "timestamp": datetime.utcnow().isoformat()
-                })
+            if state.get("messages"):
+                last_message = state["messages"][-1]
+                await websocket.send_json(
+                    {
+                        "type": "message",
+                        "message": last_message,
+                        "timestamp": datetime.utcnow().isoformat(),
+                    }
+                )
 
             # Wait before next update (30 FPS = ~33ms)
             await asyncio.sleep(0.033)
@@ -465,11 +497,13 @@ async def list_demos(db: Optional[AsyncSession] = Depends(get_db)):
         "sessions": [
             {
                 "session_id": sid,
-                "status": copilot.state.get('status') if copilot.state else 'unknown',
-                "demo_type": copilot.state.get('demo_type') if copilot.state else 'unknown'
+                "status": copilot.state.get("status") if copilot.state else "unknown",
+                "demo_type": (
+                    copilot.state.get("demo_type") if copilot.state else "unknown"
+                ),
             }
             for sid, copilot in active_demos.items()
-        ]
+        ],
     }
 
 
@@ -483,7 +517,7 @@ async def analytics_summary(db: Optional[AsyncSession] = Depends(get_db)):
         "completion_rate": 0.0,
         "avg_duration_minutes": 0.0,
         "most_asked_questions": [],
-        "top_features_requested": []
+        "top_features_requested": [],
     }
 
 
@@ -533,10 +567,5 @@ async def shutdown_event():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")

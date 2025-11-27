@@ -2,6 +2,7 @@
 CRUD operations for Demo Copilot database
 Database access layer with common operations
 """
+
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
@@ -9,13 +10,19 @@ from sqlalchemy import func, desc
 import uuid
 
 from .models import (
-    DemoSession, DemoAction, CustomerQuestion,
-    DemoScript, DemoAnalytics,
-    DemoSessionCreate, DemoActionCreate, CustomerQuestionCreate
+    DemoSession,
+    DemoAction,
+    CustomerQuestion,
+    DemoScript,
+    DemoAnalytics,
+    DemoSessionCreate,
+    DemoActionCreate,
+    CustomerQuestionCreate,
 )
 
 
 # Demo Session CRUD
+
 
 def create_demo_session(db: Session, session_data: DemoSessionCreate) -> DemoSession:
     """Create a new demo session"""
@@ -30,7 +37,7 @@ def create_demo_session(db: Session, session_data: DemoSessionCreate) -> DemoSes
         demo_customization=session_data.demo_customization,
         voice_id=session_data.voice_id,
         voice_speed=session_data.voice_speed,
-        status="initialized"
+        status="initialized",
     )
     db.add(session)
     db.commit()
@@ -43,7 +50,9 @@ def get_demo_session(db: Session, session_id: str) -> Optional[DemoSession]:
     return db.query(DemoSession).filter(DemoSession.id == session_id).first()
 
 
-def update_demo_session(db: Session, session_id: str, **kwargs) -> Optional[DemoSession]:
+def update_demo_session(
+    db: Session, session_id: str, **kwargs
+) -> Optional[DemoSession]:
     """Update demo session fields"""
     session = get_demo_session(db, session_id)
     if session:
@@ -58,54 +67,56 @@ def update_demo_session(db: Session, session_id: str, **kwargs) -> Optional[Demo
 def start_demo_session(db: Session, session_id: str) -> Optional[DemoSession]:
     """Mark demo session as started"""
     return update_demo_session(
-        db,
-        session_id,
-        status="running",
-        started_at=datetime.utcnow()
+        db, session_id, status="running", started_at=datetime.utcnow()
     )
 
 
-def complete_demo_session(db: Session, session_id: str, duration_seconds: int) -> Optional[DemoSession]:
+def complete_demo_session(
+    db: Session, session_id: str, duration_seconds: int
+) -> Optional[DemoSession]:
     """Mark demo session as completed"""
     return update_demo_session(
         db,
         session_id,
         status="completed",
         completed_at=datetime.utcnow(),
-        duration_seconds=duration_seconds
+        duration_seconds=duration_seconds,
     )
 
 
 def abandon_demo_session(db: Session, session_id: str) -> Optional[DemoSession]:
     """Mark demo session as abandoned"""
     return update_demo_session(
-        db,
-        session_id,
-        status="abandoned",
-        completed_at=datetime.utcnow()
+        db, session_id, status="abandoned", completed_at=datetime.utcnow()
     )
 
 
 def get_active_sessions(db: Session, limit: int = 100) -> List[DemoSession]:
     """Get all active (non-completed) sessions"""
-    return db.query(DemoSession).filter(
-        DemoSession.status.in_(["initialized", "running", "paused"])
-    ).order_by(desc(DemoSession.created_at)).limit(limit).all()
+    return (
+        db.query(DemoSession)
+        .filter(DemoSession.status.in_(["initialized", "running", "paused"]))
+        .order_by(desc(DemoSession.created_at))
+        .limit(limit)
+        .all()
+    )
 
 
 def get_sessions_by_customer(db: Session, customer_email: str) -> List[DemoSession]:
     """Get all sessions for a customer"""
-    return db.query(DemoSession).filter(
-        DemoSession.customer_email == customer_email
-    ).order_by(desc(DemoSession.created_at)).all()
+    return (
+        db.query(DemoSession)
+        .filter(DemoSession.customer_email == customer_email)
+        .order_by(desc(DemoSession.created_at))
+        .all()
+    )
 
 
 # Demo Action CRUD
 
+
 def create_demo_action(
-    db: Session,
-    session_id: str,
-    action_data: DemoActionCreate
+    db: Session, session_id: str, action_data: DemoActionCreate
 ) -> DemoAction:
     """Create a new demo action"""
     action = DemoAction(
@@ -117,7 +128,7 @@ def create_demo_action(
         selector=action_data.selector,
         value=action_data.value,
         narration_text=action_data.narration_text,
-        status="pending"
+        status="pending",
     )
     db.add(action)
     db.commit()
@@ -140,7 +151,7 @@ def complete_demo_action(
     db: Session,
     action_id: str,
     duration_ms: int,
-    narration_audio_url: Optional[str] = None
+    narration_audio_url: Optional[str] = None,
 ) -> Optional[DemoAction]:
     """Mark action as completed"""
     action = db.query(DemoAction).filter(DemoAction.id == action_id).first()
@@ -157,24 +168,26 @@ def complete_demo_action(
 
 def get_session_actions(db: Session, session_id: str) -> List[DemoAction]:
     """Get all actions for a session"""
-    return db.query(DemoAction).filter(
-        DemoAction.session_id == session_id
-    ).order_by(DemoAction.step_number).all()
+    return (
+        db.query(DemoAction)
+        .filter(DemoAction.session_id == session_id)
+        .order_by(DemoAction.step_number)
+        .all()
+    )
 
 
 # Customer Question CRUD
 
+
 def create_customer_question(
-    db: Session,
-    session_id: str,
-    question_data: CustomerQuestionCreate
+    db: Session, session_id: str, question_data: CustomerQuestionCreate
 ) -> CustomerQuestion:
     """Create a new customer question"""
     question = CustomerQuestion(
         id=str(uuid.uuid4()),
         session_id=session_id,
         question_text=question_data.question_text,
-        asked_at_step=question_data.asked_at_step
+        asked_at_step=question_data.asked_at_step,
     )
     db.add(question)
     db.commit()
@@ -195,12 +208,12 @@ def answer_customer_question(
     response_text: str,
     response_time_ms: int,
     intent: Optional[str] = None,
-    sentiment: Optional[str] = None
+    sentiment: Optional[str] = None,
 ) -> Optional[CustomerQuestion]:
     """Add answer to customer question"""
-    question = db.query(CustomerQuestion).filter(
-        CustomerQuestion.id == question_id
-    ).first()
+    question = (
+        db.query(CustomerQuestion).filter(CustomerQuestion.id == question_id).first()
+    )
     if question:
         question.response_text = response_text
         question.response_time_ms = response_time_ms
@@ -213,24 +226,30 @@ def answer_customer_question(
 
 def get_session_questions(db: Session, session_id: str) -> List[CustomerQuestion]:
     """Get all questions for a session"""
-    return db.query(CustomerQuestion).filter(
-        CustomerQuestion.session_id == session_id
-    ).order_by(CustomerQuestion.created_at).all()
+    return (
+        db.query(CustomerQuestion)
+        .filter(CustomerQuestion.session_id == session_id)
+        .order_by(CustomerQuestion.created_at)
+        .all()
+    )
 
 
 # Demo Script CRUD
 
+
 def get_demo_script(
-    db: Session,
-    product_name: str,
-    script_type: str = "standard"
+    db: Session, product_name: str, script_type: str = "standard"
 ) -> Optional[DemoScript]:
     """Get active demo script for a product"""
-    return db.query(DemoScript).filter(
-        DemoScript.product_name == product_name,
-        DemoScript.script_type == script_type,
-        DemoScript.is_active == True
-    ).first()
+    return (
+        db.query(DemoScript)
+        .filter(
+            DemoScript.product_name == product_name,
+            DemoScript.script_type == script_type,
+            DemoScript.is_active == True,
+        )
+        .first()
+    )
 
 
 def get_all_demo_scripts(db: Session, active_only: bool = True) -> List[DemoScript]:
@@ -243,23 +262,24 @@ def get_all_demo_scripts(db: Session, active_only: bool = True) -> List[DemoScri
 
 # Analytics CRUD
 
+
 def create_daily_analytics(
-    db: Session,
-    date: datetime,
-    product_name: Optional[str] = None
+    db: Session, date: datetime, product_name: Optional[str] = None
 ) -> DemoAnalytics:
     """Create or get daily analytics record"""
     # Try to get existing record
-    analytics = db.query(DemoAnalytics).filter(
-        DemoAnalytics.date == date.date(),
-        DemoAnalytics.product_name == product_name
-    ).first()
+    analytics = (
+        db.query(DemoAnalytics)
+        .filter(
+            DemoAnalytics.date == date.date(),
+            DemoAnalytics.product_name == product_name,
+        )
+        .first()
+    )
 
     if not analytics:
         analytics = DemoAnalytics(
-            id=str(uuid.uuid4()),
-            date=date.date(),
-            product_name=product_name
+            id=str(uuid.uuid4()), date=date.date(), product_name=product_name
         )
         db.add(analytics)
         db.commit()
@@ -268,7 +288,9 @@ def create_daily_analytics(
     return analytics
 
 
-def update_daily_analytics(db: Session, date: datetime, product_name: Optional[str] = None):
+def update_daily_analytics(
+    db: Session, date: datetime, product_name: Optional[str] = None
+):
     """
     Recalculate analytics for a specific date
     Aggregates data from demo sessions
@@ -281,8 +303,7 @@ def update_daily_analytics(db: Session, date: datetime, product_name: Optional[s
     end_date = start_date + timedelta(days=1)
 
     query = db.query(DemoSession).filter(
-        DemoSession.created_at >= start_date,
-        DemoSession.created_at < end_date
+        DemoSession.created_at >= start_date, DemoSession.created_at < end_date
     )
 
     if product_name:
@@ -300,9 +321,15 @@ def update_daily_analytics(db: Session, date: datetime, product_name: Optional[s
     analytics.total_demos_abandoned = len(abandoned)
 
     if completed:
-        analytics.avg_duration_seconds = sum(s.duration_seconds or 0 for s in completed) / len(completed)
-        analytics.avg_questions_per_demo = sum(s.questions_asked for s in completed) / len(completed)
-        analytics.avg_engagement_score = sum(s.engagement_score or 0 for s in completed if s.engagement_score) / len(completed)
+        analytics.avg_duration_seconds = sum(
+            s.duration_seconds or 0 for s in completed
+        ) / len(completed)
+        analytics.avg_questions_per_demo = sum(
+            s.questions_asked for s in completed
+        ) / len(completed)
+        analytics.avg_engagement_score = sum(
+            s.engagement_score or 0 for s in completed if s.engagement_score
+        ) / len(completed)
 
     if total_started > 0:
         analytics.avg_completion_rate = len(completed) / total_started
@@ -318,7 +345,9 @@ def update_daily_analytics(db: Session, date: datetime, product_name: Optional[s
             feature_counts[q.intent] = feature_counts.get(q.intent, 0) + 1
 
     top_features = sorted(feature_counts.items(), key=lambda x: x[1], reverse=True)[:5]
-    analytics.top_features_requested = [{"feature": f, "count": c} for f, c in top_features]
+    analytics.top_features_requested = [
+        {"feature": f, "count": c} for f, c in top_features
+    ]
 
     db.commit()
     db.refresh(analytics)
@@ -329,12 +358,11 @@ def get_analytics_range(
     db: Session,
     start_date: datetime,
     end_date: datetime,
-    product_name: Optional[str] = None
+    product_name: Optional[str] = None,
 ) -> List[DemoAnalytics]:
     """Get analytics for a date range"""
     query = db.query(DemoAnalytics).filter(
-        DemoAnalytics.date >= start_date.date(),
-        DemoAnalytics.date <= end_date.date()
+        DemoAnalytics.date >= start_date.date(), DemoAnalytics.date <= end_date.date()
     )
 
     if product_name:
@@ -345,6 +373,7 @@ def get_analytics_range(
 
 # Dashboard/Reports
 
+
 def get_dashboard_stats(db: Session, days: int = 7) -> Dict[str, Any]:
     """
     Get dashboard statistics for the last N days
@@ -354,58 +383,76 @@ def get_dashboard_stats(db: Session, days: int = 7) -> Dict[str, Any]:
     cutoff_date = datetime.utcnow() - timedelta(days=days)
 
     # Total sessions
-    total_sessions = db.query(func.count(DemoSession.id)).filter(
-        DemoSession.created_at >= cutoff_date
-    ).scalar()
+    total_sessions = (
+        db.query(func.count(DemoSession.id))
+        .filter(DemoSession.created_at >= cutoff_date)
+        .scalar()
+    )
 
     # Completed sessions
-    completed_sessions = db.query(func.count(DemoSession.id)).filter(
-        DemoSession.created_at >= cutoff_date,
-        DemoSession.status == "completed"
-    ).scalar()
+    completed_sessions = (
+        db.query(func.count(DemoSession.id))
+        .filter(
+            DemoSession.created_at >= cutoff_date, DemoSession.status == "completed"
+        )
+        .scalar()
+    )
 
     # Average duration
-    avg_duration = db.query(func.avg(DemoSession.duration_seconds)).filter(
-        DemoSession.created_at >= cutoff_date,
-        DemoSession.status == "completed"
-    ).scalar()
+    avg_duration = (
+        db.query(func.avg(DemoSession.duration_seconds))
+        .filter(
+            DemoSession.created_at >= cutoff_date, DemoSession.status == "completed"
+        )
+        .scalar()
+    )
 
     # Total questions
-    total_questions = db.query(func.count(CustomerQuestion.id)).join(
-        DemoSession
-    ).filter(
-        DemoSession.created_at >= cutoff_date
-    ).scalar()
+    total_questions = (
+        db.query(func.count(CustomerQuestion.id))
+        .join(DemoSession)
+        .filter(DemoSession.created_at >= cutoff_date)
+        .scalar()
+    )
 
     # Questions by intent
-    questions_by_intent = db.query(
-        CustomerQuestion.intent,
-        func.count(CustomerQuestion.id)
-    ).join(DemoSession).filter(
-        DemoSession.created_at >= cutoff_date,
-        CustomerQuestion.intent.isnot(None)
-    ).group_by(CustomerQuestion.intent).all()
+    questions_by_intent = (
+        db.query(CustomerQuestion.intent, func.count(CustomerQuestion.id))
+        .join(DemoSession)
+        .filter(
+            DemoSession.created_at >= cutoff_date, CustomerQuestion.intent.isnot(None)
+        )
+        .group_by(CustomerQuestion.intent)
+        .all()
+    )
 
     return {
         "total_sessions": total_sessions or 0,
         "completed_sessions": completed_sessions or 0,
-        "completion_rate": (completed_sessions / total_sessions * 100) if total_sessions > 0 else 0,
+        "completion_rate": (
+            (completed_sessions / total_sessions * 100) if total_sessions > 0 else 0
+        ),
         "avg_duration_seconds": int(avg_duration) if avg_duration else 0,
         "total_questions": total_questions or 0,
-        "avg_questions_per_session": (total_questions / total_sessions) if total_sessions > 0 else 0,
-        "questions_by_intent": {intent: count for intent, count in questions_by_intent} if questions_by_intent else {}
+        "avg_questions_per_session": (
+            (total_questions / total_sessions) if total_sessions > 0 else 0
+        ),
+        "questions_by_intent": (
+            {intent: count for intent, count in questions_by_intent}
+            if questions_by_intent
+            else {}
+        ),
     }
 
 
 # Cleanup utilities
 
+
 def delete_old_sessions(db: Session, days: int = 90) -> int:
     """Delete demo sessions older than N days"""
     cutoff_date = datetime.utcnow() - timedelta(days=days)
 
-    count = db.query(DemoSession).filter(
-        DemoSession.created_at < cutoff_date
-    ).delete()
+    count = db.query(DemoSession).filter(DemoSession.created_at < cutoff_date).delete()
 
     db.commit()
     return count

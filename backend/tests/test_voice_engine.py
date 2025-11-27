@@ -32,9 +32,11 @@ def mock_elevenlabs_client():
 @pytest.fixture
 def voice_engine(mock_elevenlabs_client):
     """Create VoiceEngine instance with mocked ElevenLabs and OpenAI clients"""
-    with patch('agents.voice_engine.ElevenLabs', return_value=mock_elevenlabs_client), \
-         patch('agents.voice_engine.AsyncOpenAI') as mock_openai, \
-         patch.dict('os.environ', {'ELEVENLABS_API_KEY': 'test_key', 'OPENAI_API_KEY': 'test_key'}):
+    with patch(
+        "agents.voice_engine.ElevenLabs", return_value=mock_elevenlabs_client
+    ), patch("agents.voice_engine.AsyncOpenAI") as mock_openai, patch.dict(
+        "os.environ", {"ELEVENLABS_API_KEY": "test_key", "OPENAI_API_KEY": "test_key"}
+    ):
         engine = VoiceEngine()
         return engine
 
@@ -71,14 +73,14 @@ async def test_text_to_speech_caching(voice_engine):
 @pytest.mark.asyncio
 async def test_narrate_and_wait(voice_engine):
     """Test narrate_and_wait returns correct structure"""
-    with patch.object(voice_engine, 'text_to_speech', return_value=b"fake_audio"):
+    with patch.object(voice_engine, "text_to_speech", return_value=b"fake_audio"):
         result = await voice_engine.narrate_and_wait("Test narration")
 
-        assert 'audio_bytes' in result
-        assert 'duration_ms' in result
-        assert 'text' in result
-        assert result['text'] == "Test narration"
-        assert result['audio_bytes'] == b"fake_audio"
+        assert "audio_bytes" in result
+        assert "duration_ms" in result
+        assert "text" in result
+        assert result["text"] == "Test narration"
+        assert result["audio_bytes"] == b"fake_audio"
 
 
 def test_get_available_voices(voice_engine):
@@ -86,9 +88,9 @@ def test_get_available_voices(voice_engine):
     voices = voice_engine.get_available_voices()
 
     assert len(voices) == 2
-    assert voices[0]['name'] == "Voice 1"
-    assert voices[0]['voice_id'] == "voice1"
-    assert voices[1]['name'] == "Voice 2"
+    assert voices[0]["name"] == "Voice 1"
+    assert voices[0]["voice_id"] == "voice1"
+    assert voices[1]["name"] == "Voice 2"
     # Verify the client method was called
     voice_engine.elevenlabs_client.voices.get_all.assert_called_once()
 

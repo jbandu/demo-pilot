@@ -156,13 +156,6 @@ INSIGN_DEMO_PASSWORD=your_demo_password
 # Server URLs
 BACKEND_URL=http://localhost:8000
 FRONTEND_URL=http://localhost:3000
-
-# Vercel (for deployment)
-VERCEL_TOKEN=your_vercel_token_here
-
-# GCP (for deployment)
-GCP_PROJECT_ID=your_gcp_project_id
-GCP_REGION=us-central1
 EOF
     echo "${GREEN}✓${NC} Created .env file"
     echo "${YELLOW}⚠${NC} Please update .env with your actual API keys"
@@ -179,8 +172,7 @@ fi
 # Create frontend/.env.local
 if [ ! -f "frontend/.env.local" ]; then
     cat > frontend/.env.local << 'EOF'
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_WS_URL=ws://localhost:8000
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 EOF
     echo "${GREEN}✓${NC} Created frontend/.env.local"
 fi

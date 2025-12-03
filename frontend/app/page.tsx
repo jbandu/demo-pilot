@@ -25,8 +25,8 @@ export default function HomePage() {
     setLoading(true);
 
     try {
-      // Get backend URL from environment variable (NEXT_PUBLIC_API_URL for Vercel, NEXT_PUBLIC_BACKEND_URL for local)
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      // Get backend URL from environment variable
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
       const response = await fetch(`${backendUrl}/api/demo/start`, {
         method: 'POST',
         headers: {

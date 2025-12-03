@@ -208,7 +208,7 @@ python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 1. **Exact error messages** from browser console
 2. **Failed network requests** from Network tab (URLs, status codes)
 3. **Deployment platform logs** (backend and frontend)
-4. **Environment** (Railway, Render, Vercel, etc.)
+4. **Environment** (Railway, Render, etc.)
 5. **What actions trigger the error** (page load, button click, etc.)
 
 This will help diagnose the specific issue quickly.

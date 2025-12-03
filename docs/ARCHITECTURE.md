@@ -268,7 +268,7 @@ Client → WebSocket /ws/demo/{id}
 - Completion rates, avg duration
 - Engagement scores
 
-## Deployment Architecture (Future)
+## Deployment Architecture
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -276,12 +276,12 @@ Client → WebSocket /ws/demo/{id}
 └──────────────┬──────────────────────────────────┘
                │ HTTPS/WSS
 ┌──────────────▼──────────────────────────────────┐
-│           Vercel (Frontend)                      │
-│   Next.js App + Static Assets                   │
+│           Railway (Frontend)                     │
+│   Next.js App (Docker Container)                │
 └──────────────┬──────────────────────────────────┘
                │ WSS/HTTPS
 ┌──────────────▼──────────────────────────────────┐
-│      Google Cloud Run (Backend)                  │
+│           Railway (Backend)                      │
 │   - FastAPI Server                               │
 │   - Demo Copilot Agents                          │
 │   - Playwright Browser (Chromium)                │

@@ -25,10 +25,10 @@ export default function DemoPage() {
   const params = useParams();
   const sessionId = params.sessionId as string;
 
-  // Get backend URL from environment (NEXT_PUBLIC_API_URL for Vercel, NEXT_PUBLIC_BACKEND_URL for local)
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-  // Get WebSocket URL from environment or derive from backend URL
-  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || backendUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+  // Get backend URL from environment variable
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+  // Derive WebSocket URL from backend URL
+  const wsUrl = backendUrl.replace('https://', 'wss://').replace('http://', 'ws://');
 
   const [status, setStatus] = useState<DemoStatus | null>(null);
   const [isPaused, setIsPaused] = useState(false);

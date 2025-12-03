@@ -2,30 +2,35 @@
 
 set -e
 
-echo "🚀 Deploying Complete Demo Copilot System..."
+echo "🚀 Deploying Complete Demo Copilot System to Railway..."
+echo ""
+echo "Note: This script assumes you have Railway CLI installed and configured."
+echo "Install with: npm i -g @railway/cli && railway login"
+echo ""
 
-# Load environment variables
-if [ -f .env ]; then
-    export $(cat .env | xargs)
+# Check if railway CLI is available
+if ! command -v railway &> /dev/null; then
+    echo "❌ Railway CLI not found. Please install it first:"
+    echo "   npm i -g @railway/cli"
+    echo "   railway login"
+    exit 1
 fi
 
 # Deploy backend
 echo ""
 echo "📦 Step 1/2: Deploying Backend..."
-./scripts/deploy-backend.sh
-
-# Get backend URL
-BACKEND_URL=$(gcloud run services describe demo-copilot-backend --region us-central1 --format 'value(status.url)')
-export NEXT_PUBLIC_API_URL=$BACKEND_URL
-export NEXT_PUBLIC_WS_URL="${BACKEND_URL/https/wss}"
+cd backend
+railway up --service backend
+cd ..
 
 # Deploy frontend
 echo ""
 echo "📦 Step 2/2: Deploying Frontend..."
-./scripts/deploy-frontend-vercel.sh
+cd frontend
+railway up --service frontend
+cd ..
 
 echo ""
 echo "✅ Full deployment complete!"
 echo ""
-echo "🔗 Backend API: $BACKEND_URL"
-echo "🔗 Frontend: Check Vercel output above"
+echo "🔗 Check your Railway dashboard for service URLs"

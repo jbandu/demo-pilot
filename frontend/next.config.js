@@ -2,10 +2,11 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  output: 'standalone', // Required for Docker deployment
+  // Use standalone output only for Docker/Railway deployments, not for Vercel
+  ...(process.env.VERCEL ? {} : { output: 'standalone' }),
   async rewrites() {
-    // Use environment variable for backend URL in production
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+    // Use environment variable for backend URL (NEXT_PUBLIC_API_URL for Vercel, NEXT_PUBLIC_BACKEND_URL for local)
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
     return [
       {
         source: '/api/:path*',

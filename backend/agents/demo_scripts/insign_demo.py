@@ -10,7 +10,7 @@ class InSignDemoScript:
 
     def __init__(
         self,
-        demo_url: str = "https://insign-pi.vercel.app",
+        demo_url: str = "https://insign-pi.railway.app",
         demo_email: str = "jbandu@gmail.com",
         demo_password: str = "Memphis123",
     ):

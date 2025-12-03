@@ -6,8 +6,7 @@ This guide covers deploying Demo Copilot to production using Railway (recommende
 
 - [Prerequisites](#prerequisites)
 - [Option 1: Railway (Recommended)](#option-1-railway-recommended)
-- [Option 2: Vercel + Railway Hybrid](#option-2-vercel--railway-hybrid)
-- [Option 3: Other Platforms](#option-3-other-platforms)
+- [Option 2: Other Platforms](#option-2-other-platforms)
 - [Environment Variables](#environment-variables)
 - [Post-Deployment](#post-deployment)
 
@@ -123,48 +122,7 @@ NEXT_PUBLIC_BACKEND_URL=https://your-backend.railway.app
 
 ---
 
-## Option 2: Vercel + Railway Hybrid
-
-Deploy frontend on Vercel (best Next.js performance) and backend on Railway.
-
-### Deploy Backend to Railway
-
-Follow **Option 1** steps above, but only deploy the backend service.
-
-### Deploy Frontend to Vercel
-
-1. Go to [Vercel](https://vercel.com)
-2. Import `demo-pilot` repository
-3. **Root Directory:** `frontend`
-4. **Framework Preset:** Next.js
-5. **Environment Variables:**
-   ```bash
-   NEXT_PUBLIC_BACKEND_URL=https://your-backend.railway.app
-   ```
-6. Deploy
-
-### Configure CORS
-
-Update `backend/api/main.py`:
-
-```python
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://your-frontend.vercel.app",
-        "http://localhost:3000"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-```
-
-**Cost Estimate:** $5-15/month (Vercel free + Railway backend)
-
----
-
-## Option 3: Other Platforms
+## Option 2: Other Platforms
 
 ### Render
 
@@ -283,8 +241,8 @@ Created tables: demo_sessions, demo_actions, customer_questions, demo_scripts, d
 - Neon free tier: 512MB storage
 - Monitor at Neon dashboard
 
-**Railway/Vercel:**
-- Monitor usage in platform dashboards
+**Railway:**
+- Monitor usage in Railway dashboard
 - Set up billing alerts
 
 ### 5. Set Up Monitoring (Optional)
@@ -341,7 +299,7 @@ Configure in Railway dashboard under service settings.
 ### Issue: Frontend Can't Reach Backend
 
 **Check:**
-1. `NEXT_PUBLIC_BACKEND_URL` is set correctly in Vercel
+1. `NEXT_PUBLIC_BACKEND_URL` is set correctly in Railway
 2. Backend CORS allows frontend domain
 3. Backend health endpoint responds
 4. Railway backend service is running
@@ -370,7 +328,7 @@ Railway handles this automatically.
 
 1. **Audio Cache:** Already implemented - saves 90% of ElevenLabs calls
 2. **Database Connection Pooling:** Add pgbouncer
-3. **CDN for Static Assets:** Vercel does this automatically
+3. **CDN for Static Assets:** Use a CDN like Cloudflare if needed
 4. **Redis Caching:** For demo session state
 
 ---
@@ -403,7 +361,7 @@ Railway handles this automatically.
 ## Support
 
 For issues:
-1. Check Railway/Vercel logs
+1. Check Railway logs
 2. Review backend logs for errors
 3. Test health endpoints
 4. Verify environment variables
